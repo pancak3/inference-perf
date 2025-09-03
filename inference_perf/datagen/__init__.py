@@ -20,6 +20,7 @@ from .shared_prefix_datagen import SharedPrefixDataGenerator
 from .cnn_dailymail_datagen import CNNDailyMailDataGenerator
 from .infinity_instruct_datagen import InfinityInstructDataGenerator
 from .hf_billsum_datagen import BillsumConversationsDataGenerator
+from .geo_dist_datagen import GeoDistributionDataGenerator
 
 __all__ = [
     "DataGenerator",
@@ -31,4 +32,5 @@ __all__ = [
     "CNNDailyMailDataGenerator",
     "InfinityInstructDataGenerator",
     "BillsumConversationsDataGenerator",
+    "GeoDistributionDataGenerator",
 ]
