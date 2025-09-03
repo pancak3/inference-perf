@@ -175,3 +175,13 @@ cython_debug/
 
 # Test Reports
 reports-*/*.json
+
+# vscode 
+.devcontainer/
+.vscode/
+
+# mac
+.DS_Store
+
+# data
+data/

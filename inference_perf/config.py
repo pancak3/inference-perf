@@ -38,6 +38,7 @@ class DataGenType(Enum):
     Random = "random"
     SharedPrefix = "shared_prefix"
     CNNDailyMail = "cnn_dailymail"
+    GeoDist = "geo_dist"
 
 
 # Represents the distribution for input prompts and output generations.
