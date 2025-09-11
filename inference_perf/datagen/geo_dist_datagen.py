@@ -31,7 +31,6 @@ class GeoDistributionDataGenerator(DataGenerator):
             raise ValueError(f"Data path {config.path} does not exist")
         try:
             self.dataset: DataFrame = read_parquet(config.path)
-            pass
         except Exception as e:
             raise ValueError(f"Failed to read data from {config.path}: {e}")
 
@@ -45,10 +44,11 @@ class GeoDistributionDataGenerator(DataGenerator):
         
         for row in self.dataset.iter_rows(named=True):
             conversation = row["Conversation"]
+            gen_token = row["GeneratedToken"]
             messages = []
-            for message in conversation:
+            for message in conversation[:-1]:
                 messages.append(ChatMessage(role=message["role"], content=message["content"]))
-            yield ChatCompletionAPIData(messages=messages)
+            yield ChatCompletionAPIData(messages=messages, max_completion_tokens=gen_token)
 
     def is_io_distribution_supported(self) -> bool:
         return False

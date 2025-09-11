@@ -30,7 +30,7 @@ class ChatMessage(BaseModel):
 
 class ChatCompletionAPIData(InferenceAPIData):
     messages: List[ChatMessage]
-    max_tokens: int = 0
+    max_completion_tokens: int = 0
 
     def get_api_type(self) -> APIType:
         return APIType.Chat
@@ -39,12 +39,12 @@ class ChatCompletionAPIData(InferenceAPIData):
         return "/v1/chat/completions"
 
     def to_payload(self, model_name: str, max_tokens: int, ignore_eos: bool, streaming: bool) -> dict[str, Any]:
-        if self.max_tokens == 0:
-            self.max_tokens = max_tokens
+        if self.max_completion_tokens == 0:
+            self.max_completion_tokens = max_tokens
         return {
             "model": model_name,
             "messages": [{"role": m.role, "content": m.content} for m in self.messages],
-            "max_tokens": self.max_tokens,
+            "max_completion_tokens": self.max_completion_tokens,
             "ignore_eos": ignore_eos,
             "stream": streaming,
         }
