@@ -188,4 +188,9 @@ data/
 
 # test/dev config
 config.test.yaml
+config.test.yml
 config.dev.yaml
+config.dev.yml
+
+# helm
+helm/inference-perf-dist/dev.values.yaml

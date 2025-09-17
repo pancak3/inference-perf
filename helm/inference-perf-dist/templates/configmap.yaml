@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+data:
+{{- range $i, $e := until (int .Values.replicaCount) }}
+  config-{{ $i }}.yml: |
+    data:
+      type: geo_dist
+      geo_id: {{ $i }}
+      path: /data
+    storage:
+      local_storage:
+        path: "/reports"
+        report_file_prefix: "geo_id-{{ $i }}-"
+    load:
+      type: constant
+      stages:
+      - rate: 1
+        duration: 5
+    api:
+      type: chat
+      streaming: true
+    server:
+      type: vllm
+      model_name: Qwen/Qwen2.5-1.5B-Instruct
+      base_url: https://llm-d-inference-sim.qifand.com
+      ignore_eos: true
+    metrics:
+      type: default
+    report:
+      request_lifecycle:
+        summary: true
+        per_stage: true
+        per_request: false
+      prometheus:
+        summary: true
+        per_stage: false
+
+{{- end }}

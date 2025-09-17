@@ -71,6 +71,7 @@ class DataConfig(BaseModel):
     input_distribution: Optional[Distribution] = None
     output_distribution: Optional[Distribution] = None
     shared_prefix: Optional[SharedPrefix] = None
+    geo_id: Optional[int] = None  # for geo_dist type, specify which geo distribution to use
 
 
 class ModelServerType(Enum):
