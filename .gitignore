@@ -185,3 +185,7 @@ reports-*/*.json
 
 # data
 data/
+
+# test/dev config
+config.test.yaml
+config.dev.yaml
