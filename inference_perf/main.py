@@ -15,9 +15,11 @@ from argparse import ArgumentParser
 from inference_perf.analysis.analyze import analyze_reports
 from typing import List, Optional
 from inference_perf.client.modelserver.tgi_client import TGImodelServerClient
+from inference_perf.client.modelserver.dataset_openai_client import DatasetOpenAIModelServerClient
 from inference_perf.loadgen import LoadGenerator
 from inference_perf.config import (
     DataGenType,
+    LoadType,
     MetricsClientType,
     ModelServerType,
     ReportConfig,
@@ -49,6 +51,7 @@ from inference_perf.client.requestdatacollector import (
     LocalRequestDataCollector,
     MultiprocessRequestDataCollector,
 )
+from inference_perf.loadgen import DatasetLoadGenerator
 from inference_perf.reportgen import ReportGenerator
 from inference_perf.utils import CustomTokenizer, ReportFile
 from inference_perf.logger import setup_logging
@@ -163,8 +166,7 @@ def main_cli() -> None:
                 api_key=config.server.api_key,
             )
             # vllm_client supports inferring the tokenizer
-            tokenizer = model_server_client.tokenizer
-        if config.server.type == ModelServerType.SGLANG:
+        elif config.server.type == ModelServerType.SGLANG:
             model_server_client = SGlangModelServerClient(
                 reportgen.get_metrics_collector(),
                 api_config=config.api,
@@ -177,7 +179,6 @@ def main_cli() -> None:
                 api_key=config.server.api_key,
             )
             # sglang_client supports inferring the tokenizer
-            tokenizer = model_server_client.tokenizer
         if config.server.type == ModelServerType.TGI:
             model_server_client = TGImodelServerClient(
                 reportgen.get_metrics_collector(),
@@ -191,7 +192,20 @@ def main_cli() -> None:
                 api_key=config.server.api_key,
             )
             # tgi_client supports inferring the tokenizer
-            tokenizer = model_server_client.tokenizer
+        elif config.server.type == ModelServerType.DATASET:
+            model_server_client = DatasetOpenAIModelServerClient(
+                reportgen.get_metrics_collector(),
+                api_config=config.api,
+                uri=config.server.base_url,
+                model_name=config.server.model_name,
+                tokenizer_config=config.tokenizer,
+                ignore_eos=config.server.ignore_eos,
+                max_tcp_connections=config.load.worker_max_tcp_connections,
+                additional_filters=config.metrics.prometheus.filters if config.metrics and config.metrics.prometheus else [],
+                api_key=config.server.api_key,
+            )
+            # openAI client supports inferring the tokenizer
+        tokenizer = model_server_client.tokenizer
     else:
         raise Exception("model server client config missing")
 
@@ -266,7 +280,12 @@ def main_cli() -> None:
             and config.report.prometheus.per_stage
         ):
             config.load.interval = max(config.load.interval, metrics_client.scrape_interval)
-        loadgen = LoadGenerator(datagen, config.load)
+        if config.load.type in {LoadType.POISSON, LoadType.CONSTANT}:
+            loadgen = LoadGenerator(datagen, config.load)
+        elif config.load.type == LoadType.DATASET:
+            loadgen = DatasetLoadGenerator(datagen, config.load)
+        else:
+            raise Exception(f"Unsupported load type: {config.load.type}")
     else:
         raise Exception("load config missing")
 

@@ -83,11 +83,13 @@ class ModelServerType(Enum):
     VLLM = "vllm"
     SGLANG = "sglang"
     TGI = "tgi"
+    DATASET = "dataset"
 
 
 class LoadType(Enum):
     CONSTANT = "constant"
     POISSON = "poisson"
+    DATASET = "dataset"
 
 
 class MetricsClientType(Enum):
@@ -122,6 +124,10 @@ class LoadConfig(BaseModel):
     num_workers: int = max(1, cpu_count())  # type: ignore
     worker_max_concurrency: int = 100
     worker_max_tcp_connections: int = 2500
+    
+    # for geo_dist load type
+    duration: Optional[int] = None
+    num_requests: Optional[int] = None
 
 
 class StorageConfigBase(BaseModel):

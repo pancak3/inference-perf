@@ -14,6 +14,7 @@
 from .base import InferenceAPIData, InferenceInfo, RequestLifecycleMetric, ErrorResponseInfo
 from .chat import ChatCompletionAPIData, ChatMessage
 from .completion import CompletionAPIData
+from .dataset_chat import DatasetChatCompletionAPIData
 
 __all__ = [
     "InferenceAPIData",

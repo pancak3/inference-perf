@@ -15,6 +15,7 @@ from .base import ModelServerClient
 from .mock_client import MockModelServerClient
 from .vllm_client import vLLMModelServerClient
 from .sglang_client import SGlangModelServerClient
+from .dataset_openai_client import DatasetOpenAIModelServerClient
 
 
-__all__ = ["ModelServerClient", "MockModelServerClient", "vLLMModelServerClient", "SGlangModelServerClient"]
+__all__ = ["ModelServerClient", "MockModelServerClient", "vLLMModelServerClient", "SGlangModelServerClient", "DatasetOpenAIModelServerClient"]

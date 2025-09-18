@@ -89,3 +89,15 @@ class PoissonLoadTimer(LoadTimer):
             for _ in range(req_count):
                 next_time = next(time_generator)
                 yield next_time
+
+class DatasetLoadTimer(LoadTimer):
+    """
+    A load generator that generates requests based on a dataset distribution. Timestamp must be provided in the dataset.
+    """
+    def __init__(self, rate: float, duration: float) -> None:
+        # no need
+        pass
+
+    def start_timer(self, initial: Optional[float] = None) -> Generator[float, None, None]:
+        # no need
+        pass

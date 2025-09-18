@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Generator, List, Optional
 from polars import read_parquet, DataFrame
 from pathlib import Path
+from inference_perf.apis.dataset_chat import DatasetChatCompletionAPIData
 from inference_perf.config import APIConfig, APIType, DataConfig
 from inference_perf.datagen.base import DataGenerator
 from inference_perf.apis import InferenceAPIData, CompletionAPIData, ChatCompletionAPIData, ChatMessage
@@ -33,15 +34,15 @@ class GeoDistributionDataGenerator(DataGenerator):
             raise ValueError(f"Data path {config.path} does not exist")
         try:
             self.dataset: DataFrame = read_parquet(config.path)
+            # the datasets are alredy sorted by timestamp
+            # self.dataset: DataFrame = self.dataset.sort("Timestamp")
         except Exception as e:
             raise ValueError(f"Failed to read data from {config.path}: {e}")
         
-        if config.start_timestamp is None:
-            raise ValueError("start_timestamp must be provided for GeoDistributionDataGenerator")
         if config.first_record_timestamp is None:
             raise ValueError("first_record_timestamp must be provided for GeoDistributionDataGenerator")
         
-        self.start_timestamp: datetime = config.start_timestamp
+        self.start_timestamp: datetime = config.start_timestamp if config.start_timestamp else datetime.now(timezone.utc)
         if self.start_timestamp.tzinfo is None:
             self.start_timestamp = self.start_timestamp.replace(tzinfo=timezone.utc)
 
@@ -54,12 +55,13 @@ class GeoDistributionDataGenerator(DataGenerator):
             logger.warning("delay_start_seconds not provided, default to 0")
 
         # get the time shift in microseconds of seconds
-        self.time_shift: timedelta = (self.start_timestamp - self.first_record_timestamp) + timedelta(microseconds=self.delay_start_seconds * 1_000_000)
+        self.time_shift: timedelta = (self.start_timestamp - self.first_record_timestamp) \
+            + timedelta(microseconds=self.delay_start_seconds * 1_000_000)
 
         logger.info(f"==== GeoDistributionDataGenerator ===="
                     f"\n\tData path: {config.path}"
-                    f"\n\tStart timestamp: {self.start_timestamp} (epoch: {self.start_timestamp.timestamp()})"
-                    f"\n\tFirst record timestamp: {self.first_record_timestamp} (epoch: {self.first_record_timestamp.timestamp()})"
+                    f"\n\tStart timestamp: {self.start_timestamp}"
+                    f"\n\tFirst record timestamp: {self.first_record_timestamp}"
                     f"\n\tDelay start seconds: {self.delay_start_seconds}"
                     f"\n\tTime shift (microseconds): {self.time_shift.total_seconds() * 1_000_000}")
 
@@ -71,12 +73,19 @@ class GeoDistributionDataGenerator(DataGenerator):
             raise Exception("Unsupported API type")
         
         for row in self.dataset.iter_rows(named=True):
+            request_send_time = row["Timestamp"] + self.time_shift
+            user_id = str(row["UserID"])
+            conversation_id = row["ConversationID"]
             conversation = row["Conversation"]
-            gen_token = row["GeneratedToken"]
+            turn = row["Turn"]
+            max_completion_tokens = row["GeneratedToken"]
+            model = row["Model"]
             messages = []
             for message in conversation[:-1]:
                 messages.append(ChatMessage(role=message["role"], content=message["content"]))
-            yield ChatCompletionAPIData(messages=messages, max_completion_tokens=gen_token)
+            yield DatasetChatCompletionAPIData(
+                messages=messages, max_completion_tokens=max_completion_tokens, request_send_time=request_send_time, 
+                user_id=user_id, conversation_id=conversation_id, turn=turn, model=model)
 
     def is_io_distribution_supported(self) -> bool:
         return False
