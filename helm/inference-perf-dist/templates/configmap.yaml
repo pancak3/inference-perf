@@ -23,8 +23,8 @@ data:
       streaming: true
     server:
       type: vllm
-      model_name: Qwen/Qwen2.5-1.5B-Instruct
-      base_url: https://llm-d-inference-sim.qifand.com
+      model_name: {{ $.Values.server.model_name }}
+      base_url: {{ $.Values.server.base_url }}
       ignore_eos: true
     metrics:
       type: default
