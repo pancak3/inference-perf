@@ -30,15 +30,14 @@ class GeoDistributionDataGenerator(DataGenerator):
         if config.geo_id is None:
             raise ValueError("geo_id must be provided for GeoDistributionDataGenerator")
         filename = f"{config.geo_id}.parquet"
-        path = Path(config.path) / filename
         # if path does not exist
-        if Path(path).exists() is False:
-            raise ValueError(f"Data path {path} does not exist")
+        if Path(config.path).exists() is False:
+            raise ValueError(f"Data path {config.path} does not exist")
         try:
-            self.dataset: DataFrame = read_parquet(path)
+            self.dataset: DataFrame = read_parquet(config.path)
         except Exception as e:
-            raise ValueError(f"Failed to read data from {path}: {e}")
-        logger.info(f"Loaded dataset with {self.dataset.height} rows from {path}")
+            raise ValueError(f"Failed to read data from {config.path}: {e}")
+        logger.info(f"Loaded dataset with {self.dataset.height} rows from {config.path}")
 
 
     def get_supported_apis(self) -> List[APIType]:

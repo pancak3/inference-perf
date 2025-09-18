@@ -7,12 +7,12 @@ data:
   config-{{ $i }}.yml: |
     data:
       type: geo_dist
-      geo_id: {{ $i }}
-      path: /data
+      geo_id: {{ add $i 1 }}
+      path: /data/user_ts_zone_hotspot_combined_zone_{{ add $i 1 }}.parquet
     storage:
       local_storage:
         path: "/reports"
-        report_file_prefix: "geo_id-{{ $i }}-"
+        report_file_prefix: geo_id-{{ add $i 1 }}-
     load:
       type: constant
       stages:
