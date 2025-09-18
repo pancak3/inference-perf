@@ -1,5 +1,5 @@
 {{- if .Values.runAsJob }}
-{{- range .Values.geo_ids }}
+{{- range .Values.dataset.geo_ids }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -56,8 +56,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            - name: GEO_ID
-              value: "{{ . }}"
+            - name: TZ
+              value: "UTC"
           {{- with $.Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

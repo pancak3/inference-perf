@@ -71,7 +71,12 @@ class DataConfig(BaseModel):
     input_distribution: Optional[Distribution] = None
     output_distribution: Optional[Distribution] = None
     shared_prefix: Optional[SharedPrefix] = None
-    geo_id: Optional[int] = None  # for geo_dist type, specify which geo distribution to use
+
+    # for geo_dist type
+    geo_id: Optional[int] = None
+    start_timestamp: Optional[datetime] = None
+    first_record_timestamp: Optional[datetime] = None
+    delay_start_seconds: Optional[int] = None
 
 
 class ModelServerType(Enum):
