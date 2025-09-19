@@ -77,6 +77,8 @@ class DataConfig(BaseModel):
     start_timestamp: Optional[datetime] = None
     first_record_timestamp: Optional[datetime] = None
     delay_start_seconds: Optional[int] = None
+    num_requests: Optional[int] = None
+    duration: Optional[int] = None 
 
 
 class ModelServerType(Enum):
@@ -125,10 +127,6 @@ class LoadConfig(BaseModel):
     worker_max_concurrency: int = 100
     worker_max_tcp_connections: int = 2500
     
-    # for geo_dist load type
-    duration: Optional[int] = None
-    num_requests: Optional[int] = None
-
 
 class StorageConfigBase(BaseModel):
     path: str = f"reports-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
