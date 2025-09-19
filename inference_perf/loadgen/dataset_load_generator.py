@@ -110,6 +110,7 @@ class Worker(mp.Process):
     ):
         super().__init__()
         self.id = id
+        assert isinstance(client, DatasetOpenAIModelServerClient)
         self.client = client
         self.request_queue = request_queue
         self.status_queue: mp.JoinableQueue[Status] = mp.JoinableQueue()
@@ -136,7 +137,6 @@ class Worker(mp.Process):
                     queue: mp.Queue,  # type: ignore[type-arg]
                     request_data: DatasetOpenAIModelServerClient,
                     request_time: float,
-                    stage_id: int,
                     detailed_result_queue: mp.Queue
                 ) -> None:
                     current_time = time.perf_counter()
@@ -146,13 +146,13 @@ class Worker(mp.Process):
                         await sleep(sleep_time)
                     else:
                         logger.debug(f"Worker {self.id} missed scheduled request time by {-1.0 * sleep_time:0.2f}")
-                    await self.client.process_request(request_data, stage_id, request_time, detailed_result_queue)
+                    await self.client.process_request(request_data, request_time, detailed_result_queue)
                     queue.task_done()
                     semaphore.release()
 
-                stage_id, request = item
+                _, request = item
                 request_time = request.request_send_time
-                task = create_task(schedule_client(self.request_queue, request, request_time, stage_id, self.detailed_result_queue))
+                task = create_task(schedule_client(self.request_queue, request, request_time, self.detailed_result_queue))
                 tasks.append(task)
                 await sleep(0)
             except mp.queues.Empty:

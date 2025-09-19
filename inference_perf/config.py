@@ -87,12 +87,13 @@ class ModelServerType(Enum):
     SGLANG = "sglang"
     TGI = "tgi"
     DATASET = "dataset"
+    GEO_DIST = "geo_dist"
 
 
 class LoadType(Enum):
     CONSTANT = "constant"
     POISSON = "poisson"
-    DATASET = "dataset"
+    GEO_DIST = "geo_dist"
 
 
 class MetricsClientType(Enum):

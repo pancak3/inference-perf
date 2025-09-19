@@ -75,10 +75,13 @@ class InferencePerfRunner:
     def run(self) -> None:
         async def _run() -> None:
             collector = self.reportgen.get_metrics_collector()
-            if self.loadgen.load_type != LoadType.DATASET and isinstance(collector, MultiprocessRequestDataCollector):
+            if self.loadgen.load_type != LoadType.GEO_DIST and isinstance(collector, MultiprocessRequestDataCollector):
                 collector.start()
+            if self.loadgen.load_type == LoadType.GEO_DIST:
+                assert isinstance(self.loadgen, DatasetLoadGenerator)   
+                assert isinstance(self.client, DatasetOpenAIModelServerClient)
             await self.loadgen.run(self.client)
-            if self.loadgen.load_type != LoadType.DATASET and isinstance(collector, MultiprocessRequestDataCollector):
+            if self.loadgen.load_type != LoadType.GEO_DIST and isinstance(collector, MultiprocessRequestDataCollector):
                 await collector.stop()
 
         asyncio.run(_run())
@@ -193,6 +196,18 @@ def main_cli() -> None:
             )
             # tgi_client supports inferring the tokenizer
         elif config.server.type == ModelServerType.DATASET:
+            model_server_client = TGImodelServerClient(
+                reportgen.get_metrics_collector(),
+                api_config=config.api,
+                uri=config.server.base_url,
+                model_name=config.server.model_name,
+                tokenizer_config=config.tokenizer,
+                ignore_eos=config.server.ignore_eos,
+                max_tcp_connections=config.load.worker_max_tcp_connections,
+                additional_filters=config.metrics.prometheus.filters if config.metrics and config.metrics.prometheus else [],
+                api_key=config.server.api_key,
+            )
+        elif config.server.type == ModelServerType.GEO_DIST:
             model_server_client = DatasetOpenAIModelServerClient(
                 reportgen.get_metrics_collector(),
                 api_config=config.api,
@@ -204,11 +219,11 @@ def main_cli() -> None:
                 additional_filters=config.metrics.prometheus.filters if config.metrics and config.metrics.prometheus else [],
                 api_key=config.server.api_key,
             )
-            # openAI client supports inferring the tokenizer
         tokenizer = model_server_client.tokenizer
     else:
         raise Exception("model server client config missing")
-
+    print(f"Server type: {config.server.type}")
+    print(isinstance(model_server_client, DatasetOpenAIModelServerClient))
     # Check load exists so datagen can derive total_count from the
     # stage configurations.
     if config.load is None:
@@ -282,7 +297,7 @@ def main_cli() -> None:
             config.load.interval = max(config.load.interval, metrics_client.scrape_interval)
         if config.load.type in {LoadType.POISSON, LoadType.CONSTANT}:
             loadgen = LoadGenerator(datagen, config.load)
-        elif config.load.type == LoadType.DATASET:
+        elif config.load.type == LoadType.GEO_DIST:
             loadgen = DatasetLoadGenerator(datagen, config.load, config.storage.local_storage)
         else:
             raise Exception(f"Unsupported load type: {config.load.type}")
@@ -296,7 +311,7 @@ def main_cli() -> None:
 
     # Run Perf Test
     perfrunner.run()
-    if config.load.type == LoadType.DATASET:
+    if config.load.type == LoadType.GEO_DIST:
         perfrunner.stop()
         return
     end_time = time.time()

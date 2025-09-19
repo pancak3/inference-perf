@@ -13,7 +13,7 @@ data:
       start_timestamp: {{ $startTime }}
       first_record_timestamp: {{ $.Values.dataset.first_record_timestamp }}
       delay_start_seconds: {{ $.Values.dataset.delay_start_seconds }}
-      duration: {{ $.Values.dataset.duration | default 20 }}
+      duration: {{ $.Values.dataset.duration | default -1 }}
       num_requests: {{ $.Values.dataset.num_requests | default 10 }}
       no_wait: {{ $.Values.dataset.no_wait | default false }}
     storage:
@@ -22,13 +22,13 @@ data:
         report_file_prefix: geo_id-{{ $geo_id }}-
         detailed_result_file: detailed_results-geo_id-{{ $geo_id }}.csv
     load:
-      type: dataset
+      type: geo_dist
       num_workers: {{ $.Values.number_of_workers | default 4 }}
     api:
       type: chat
       streaming: true
     server:
-      type: vllm
+      type: geo_dist
       model_name: {{ $.Values.server.model_name }}
       base_url: {{ $.Values.server.base_url }}
       ignore_eos: true

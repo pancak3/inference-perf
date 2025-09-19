@@ -11,7 +11,7 @@ class DatasetChatCompletionAPIData(ChatCompletionAPIData):
     model: str
     id: int
     
-    def to_payload(self, model_name: str, max_tokens: int, ignore_eos: bool, streaming: bool) -> dict[str, Any]:
+    def to_payload(self) -> dict[str, Any]:
         if self.max_completion_tokens == 0:
             self.max_completion_tokens = self.max_completion_tokens
         return {
