@@ -28,7 +28,12 @@ logger = logging.getLogger(__name__)
 class DatasetOpenAIModelServerClient(vLLMModelServerClient):
 
     async def process_request(self, data: DatasetChatCompletionAPIData, stage_id: int, scheduled_time: float) -> None:
-        payload = data.to_payload()
+        payload = data.to_payload(
+            model_name='',
+            max_tokens='',
+            ignore_eos='',
+            streaming='',
+        )
         headers = {"Content-Type": "application/json"}
 
         if self.api_key:

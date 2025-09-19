@@ -58,6 +58,8 @@ spec:
                   fieldPath: metadata.name
             - name: TZ
               value: "UTC"
+            - name: HF_HOME
+              value: "/hf-cache/"
           {{- with $.Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

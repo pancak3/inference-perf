@@ -14,7 +14,6 @@
 from datetime import datetime,timezone
 from inference_perf.client.modelserver.dataset_openai_client import DatasetOpenAIModelServerClient
 from inference_perf.datagen import GeoDistributionDataGenerator
-from inference_perf.client.modelserver import ModelServerClient
 from inference_perf.config import LoadConfig
 from inference_perf.loadgen.load_generator import LoadGenerator, StageRuntimeInfo, Status, RequestQueueData
 from asyncio import Semaphore, TaskGroup, create_task, gather, run, sleep, set_event_loop_policy
@@ -36,7 +35,7 @@ class DatasetLoadGenerator(LoadGenerator):
         self.workers: List[Worker] = []
         self.worker_max_concurrency = load_config.worker_max_concurrency
 
-    async def mp_run(self, client: ModelServerClient) -> None:
+    async def mp_run(self, client: DatasetOpenAIModelServerClient) -> None:
         request_queue: mp.Queue[RequestQueueData] = mp.JoinableQueue()
 
         for id in range(self.num_workers):

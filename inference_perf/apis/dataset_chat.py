@@ -10,7 +10,7 @@ class DatasetChatCompletionAPIData(ChatCompletionAPIData):
     max_completion_tokens: int
     model: str
     
-    def to_payload(self) -> dict[str, Any]:
+    def to_payload(self, model_name: str, max_tokens: int, ignore_eos: bool, streaming: bool) -> dict[str, Any]:
         if self.max_completion_tokens == 0:
             self.max_completion_tokens = self.max_completion_tokens
         return {
@@ -18,7 +18,7 @@ class DatasetChatCompletionAPIData(ChatCompletionAPIData):
             "messages": [{"role": m.role, "content": m.content} for m in self.messages],
             "max_completion_tokens": self.max_completion_tokens,
             "ignore_eos": True,
-            "stream": True,
+            "stream": True, 
             "user_id": self.user_id,
             "conversation_id": self.conversation_id,
             "turn": self.turn,
