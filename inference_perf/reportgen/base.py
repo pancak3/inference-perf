@@ -140,7 +140,7 @@ def summarize_requests(metrics: List[RequestLifecycleMetric], stage_rate: Option
             "schedule_delay": summarize(schedule_deltas),
             "send_duration": send_duration,
             "requested_rate": stage_rate,
-            "achieved_rate": len(metrics) / send_duration,
+            "achieved_rate": len(metrics) / send_duration if send_duration > 0 else 0,
         }
 
     return ResponsesSummary(

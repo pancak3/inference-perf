@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from datetime import datetime,timezone
 from inference_perf.client.modelserver.dataset_openai_client import DatasetOpenAIModelServerClient
 from inference_perf.datagen import GeoDistributionDataGenerator
 from inference_perf.client.modelserver import ModelServerClient
@@ -100,29 +101,30 @@ class DatasetLoadGenerator(LoadGenerator):
         # if self.num_workers > 0:
         #     return await self.mp_run(client)
 
-        start_time_epoch = self.datagen.start_timestamp.timestamp() 
-        end_time = start_time_epoch + self.duration
+        start_time_epoch = self.datagen.start_ts.timestamp()
+        if self.duration:
+            adjustment = time.perf_counter() - datetime.now(timezone.utc).timestamp()
+            end_time = start_time_epoch + adjustment + self.duration
         logger.info("Dataset - run started")
         async with TaskGroup() as tg:
             n_sent = 0
             for chat in self.datagen.get_data():
-                now = time.time()
-                if now > chat.request_send_time.timestamp():
+                now = time.perf_counter()
+                if now > chat.request_send_time:
                     tg.create_task(client.process_request(chat, 0, now))
                 else:
-                    time_to_wait = chat.request_send_time.timestamp() - now
+                    time_to_wait = chat.request_send_time - now
+                    if now + time_to_wait > end_time:
+                        break
                     await sleep(time_to_wait)
-                    tg.create_task(client.process_request(chat, 0, chat.request_send_time.timestamp()))
-                print(f"duration: {self.duration}, ran: {now - start_time_epoch:0.2f}")
+                    tg.create_task(client.process_request(chat, 0, chat.request_send_time))
                 if self.duration and now > end_time:
                     break
                 n_sent += 1
-                print(f"num_requests: {self.num_requests}, n_sent: {n_sent}")
                 if self.num_requests and n_sent >= self.num_requests:
                     break
-        print(f"All {n_sent} requests sent")
         self.stage_runtime_info[0] = StageRuntimeInfo(
-            stage_id=0, rate=-1, start_time=start_time_epoch, end_time=time.time()
+            stage_id=0, rate=-1, start_time=start_time_epoch, end_time=datetime.now(timezone.utc).timestamp()
         )
         logger.info("All requests sent, waiting for completion")
 

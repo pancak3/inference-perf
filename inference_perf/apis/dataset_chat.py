@@ -3,7 +3,7 @@ from typing import Any
 from datetime import datetime
 
 class DatasetChatCompletionAPIData(ChatCompletionAPIData):
-    request_send_time: datetime
+    request_send_time: float
     user_id: str
     conversation_id: str
     turn: int

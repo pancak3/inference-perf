@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Generator, List, Optional
 from polars import read_parquet, DataFrame
@@ -42,28 +43,30 @@ class GeoDistributionDataGenerator(DataGenerator):
         if config.first_record_timestamp is None:
             raise ValueError("first_record_timestamp must be provided for GeoDistributionDataGenerator")
         
-        self.start_timestamp: datetime = config.start_timestamp if config.start_timestamp else datetime.now(timezone.utc)
-        if self.start_timestamp.tzinfo is None:
-            self.start_timestamp = self.start_timestamp.replace(tzinfo=timezone.utc)
+        start_ts = config.start_timestamp if config.start_timestamp else datetime.now(timezone.utc)
+        if start_ts.tzinfo is None:
+           start_ts = start_ts.replace(tzinfo=timezone.utc)
+           
+        if config.delay_start_seconds:
+            logger.info(f"Adjusting start time by {config.delay_start_seconds} seconds")
+            start_ts = start_ts + timedelta(seconds=config.delay_start_seconds)
+        first_record_ts: datetime = config.first_record_timestamp
+        if first_record_ts.tzinfo is None:
+            first_record_ts = first_record_ts.replace(tzinfo=timezone.utc)
 
-        self.first_record_timestamp: datetime = config.first_record_timestamp
-        if self.first_record_timestamp.tzinfo is None:
-            self.first_record_timestamp = self.first_record_timestamp.replace(tzinfo=timezone.utc)
-
-        self.delay_start_seconds: int = config.delay_start_seconds or 0
-        if config.delay_start_seconds is None:
-            logger.warning("delay_start_seconds not provided, default to 0")
-
+        shift_ts = start_ts - first_record_ts
         # get the time shift in microseconds of seconds
-        self.time_shift: timedelta = (self.start_timestamp - self.first_record_timestamp) \
-            + timedelta(microseconds=self.delay_start_seconds * 1_000_000)
 
         logger.info(f"==== GeoDistributionDataGenerator ===="
                     f"\n\tData path: {config.path}"
-                    f"\n\tStart timestamp: {self.start_timestamp}"
-                    f"\n\tFirst record timestamp: {self.first_record_timestamp}"
-                    f"\n\tDelay start seconds: {self.delay_start_seconds}"
-                    f"\n\tTime shift (microseconds): {self.time_shift.total_seconds() * 1_000_000}")
+                    f"\n\tStart timestamp: {start_ts}"
+                    f"\n\tFirst record timestamp: {first_record_ts}"
+                    f"\n\tDelay start seconds: {config.delay_start_seconds}"
+                    f"\n\tTime shift (microseconds): {shift_ts}")
+        self.start_ts = start_ts
+        self.first_record_ts = first_record_ts
+        self.shift_ts = shift_ts
+        self.adjustment = time.perf_counter() - datetime.now(timezone.utc).timestamp()
 
     def get_supported_apis(self) -> List[APIType]:
         return [APIType.Completion, APIType.Chat]
@@ -73,7 +76,7 @@ class GeoDistributionDataGenerator(DataGenerator):
             raise Exception("Unsupported API type")
         
         for row in self.dataset.iter_rows(named=True):
-            request_send_time = row["Timestamp"] + self.time_shift
+            request_send_time = (row["Timestamp"] + self.shift_ts).replace(tzinfo=timezone.utc).timestamp() + self.adjustment
             user_id = str(row["UserID"])
             conversation_id = row["ConversationID"]
             conversation = row["Conversation"]
