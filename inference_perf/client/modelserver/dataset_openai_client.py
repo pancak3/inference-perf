@@ -14,9 +14,9 @@
 
 from abc import abstractmethod
 from inference_perf.apis.dataset_chat import DatasetChatCompletionAPIData
-from inference_perf.client.requestdatacollector import RequestDataCollector
-from inference_perf.apis import InferenceAPIData, InferenceInfo, RequestLifecycleMetric, ErrorResponseInfo
 from inference_perf.client.modelserver.vllm_client import vLLMModelServerClient
+import multiprocessing as mp
+
 import aiohttp
 import json
 import time
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class DatasetOpenAIModelServerClient(vLLMModelServerClient):
 
-    async def process_request(self, data: DatasetChatCompletionAPIData, stage_id: int, scheduled_time: float) -> None:
+    async def process_request(self, data: DatasetChatCompletionAPIData, stage_id: int, scheduled_time: float, detailed_result_queue: mp.Queue) -> None:
         payload = data.to_payload(
             model_name='',
             max_tokens='',
@@ -43,7 +43,7 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
             headers.update(self.api_config.headers)
 
         request_data = json.dumps(payload)
-
+        request_id = payload.get("id", None)
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=self.max_tcp_connections)) as session:
             start = time.perf_counter()
             try:
@@ -51,48 +51,7 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
                     response_info = await data.process_response(
                         response=response, config=self.api_config, tokenizer=self.tokenizer
                     )
-                    response_content = await response.text()
-                    if response.status == 200:
-                        self.metrics_collector.record_metric(
-                            RequestLifecycleMetric(
-                                stage_id=stage_id,
-                                request_data=request_data,
-                                response_data=response_content,
-                                info=response_info,
-                                error=None,
-                                start_time=start,
-                                end_time=time.perf_counter(),
-                                scheduled_time=scheduled_time,
-                            )
-                        )
-                    else:
-                        self.metrics_collector.record_metric(
-                            RequestLifecycleMetric(
-                                stage_id=stage_id,
-                                request_data=request_data,
-                                response_data=response_content,
-                                info=response_info,
-                                error=ErrorResponseInfo(error_msg=response_content, error_type="Error response"),
-                                start_time=start,
-                                end_time=time.perf_counter(),
-                                scheduled_time=scheduled_time,
-                            )
-                        )
+                    detailed_result_queue.put((request_id, scheduled_time, start, response_info.output_token_times))
             except Exception as e:
                 logger.error("error occured during request processing:", exc_info=True)
-                self.metrics_collector.record_metric(
-                    RequestLifecycleMetric(
-                        stage_id=stage_id,
-                        request_data=request_data,
-                        response_data=response_content if "response_content" in locals() else "",
-                        info=response_info if "response_info" in locals() else InferenceInfo(),
-                        error=ErrorResponseInfo(
-                            error_msg=str(e),
-                            error_type=type(e).__name__,
-                        ),
-                        start_time=start,
-                        end_time=time.perf_counter(),
-                        scheduled_time=scheduled_time,
-                    )
-                )
-
+        

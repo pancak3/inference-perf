@@ -159,7 +159,6 @@ class LoadGenerator:
         self.stageInterval = load_config.interval
         self.load_type = load_config.type
         self.stages = load_config.stages
-        self.stage_runtime_info = dict[int, StageRuntimeInfo]()
         self.num_workers = load_config.num_workers
         self.workers: List[Worker] = []
         self.worker_max_concurrency = load_config.worker_max_concurrency
@@ -410,9 +409,6 @@ class LoadGenerator:
                         continue
                     else:
                         break
-            self.stage_runtime_info[stage_id] = StageRuntimeInfo(
-                stage_id=stage_id, rate=stage.rate, start_time=start_time_epoch, end_time=time.time()
-            )
             logger.info("Stage %d - run completed", stage_id)
             if self.stageInterval and stage_id < len(self.stages) - 1:
                 await sleep(self.stageInterval)

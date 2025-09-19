@@ -9,6 +9,7 @@ class DatasetChatCompletionAPIData(ChatCompletionAPIData):
     turn: int
     max_completion_tokens: int
     model: str
+    id: int
     
     def to_payload(self, model_name: str, max_tokens: int, ignore_eos: bool, streaming: bool) -> dict[str, Any]:
         if self.max_completion_tokens == 0:
@@ -22,5 +23,6 @@ class DatasetChatCompletionAPIData(ChatCompletionAPIData):
             "user_id": self.user_id,
             "conversation_id": self.conversation_id,
             "turn": self.turn,
+            "id": self.id,
         }
     

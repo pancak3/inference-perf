@@ -78,6 +78,7 @@ class DataConfig(BaseModel):
     first_record_timestamp: Optional[datetime] = None
     delay_start_seconds: Optional[int] = None
     num_requests: Optional[int] = None
+    no_wait: bool = False
     duration: Optional[int] = None 
 
 
@@ -131,7 +132,8 @@ class LoadConfig(BaseModel):
 class StorageConfigBase(BaseModel):
     path: str = f"reports-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     report_file_prefix: Optional[str] = None
-
+    # dataset
+    detailed_result_file: Optional[str] = None
 
 class GoogleCloudStorageConfig(StorageConfigBase):
     bucket_name: str

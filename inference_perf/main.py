@@ -75,10 +75,10 @@ class InferencePerfRunner:
     def run(self) -> None:
         async def _run() -> None:
             collector = self.reportgen.get_metrics_collector()
-            if isinstance(collector, MultiprocessRequestDataCollector):
+            if self.loadgen.load_type != LoadType.DATASET and isinstance(collector, MultiprocessRequestDataCollector):
                 collector.start()
             await self.loadgen.run(self.client)
-            if isinstance(collector, MultiprocessRequestDataCollector):
+            if self.loadgen.load_type != LoadType.DATASET and isinstance(collector, MultiprocessRequestDataCollector):
                 await collector.stop()
 
         asyncio.run(_run())
@@ -283,7 +283,7 @@ def main_cli() -> None:
         if config.load.type in {LoadType.POISSON, LoadType.CONSTANT}:
             loadgen = LoadGenerator(datagen, config.load)
         elif config.load.type == LoadType.DATASET:
-            loadgen = DatasetLoadGenerator(datagen, config.load)
+            loadgen = DatasetLoadGenerator(datagen, config.load, config.storage.local_storage)
         else:
             raise Exception(f"Unsupported load type: {config.load.type}")
     else:
@@ -296,7 +296,9 @@ def main_cli() -> None:
 
     # Run Perf Test
     perfrunner.run()
-
+    if config.load.type == LoadType.DATASET:
+        perfrunner.stop()
+        return
     end_time = time.time()
     duration = end_time - start_time  # Calculate the duration of the test
 

@@ -73,6 +73,7 @@ class GeoDistributionDataGenerator(DataGenerator):
             self.num_requests = self.dataset.height
         self.duration = config.duration if config.duration else 0
         self.end_ts = self.start_ts.timestamp() + self.duration + self.adjustment if self.duration > 0 else 0
+        self.no_wait = config.no_wait
 
     def get_supported_apis(self) -> List[APIType]:
         return [APIType.Completion, APIType.Chat]
@@ -95,12 +96,13 @@ class GeoDistributionDataGenerator(DataGenerator):
             turn = row["Turn"]
             max_completion_tokens = row["GeneratedToken"]
             model = row["Model"]
+            record_id = row["ID"]
             messages = []
             for message in conversation[:-1]:
                 messages.append(ChatMessage(role=message["role"], content=message["content"]))
             yield DatasetChatCompletionAPIData(
                 messages=messages, max_completion_tokens=max_completion_tokens, request_send_time=request_send_time, 
-                user_id=user_id, conversation_id=conversation_id, turn=turn, model=model)
+                user_id=user_id, conversation_id=conversation_id, turn=turn, model=model, id=record_id)
             count += 1
             if count >= self.num_requests:
                 break

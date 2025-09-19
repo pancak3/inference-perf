@@ -15,10 +15,12 @@ data:
       delay_start_seconds: {{ $.Values.dataset.delay_start_seconds }}
       duration: {{ $.Values.dataset.duration | default 20 }}
       num_requests: {{ $.Values.dataset.num_requests | default 10 }}
+      no_wait: {{ $.Values.dataset.no_wait | default false }}
     storage:
       local_storage:
         path: "/reports"
         report_file_prefix: geo_id-{{ $geo_id }}-
+        detailed_result_file: detailed_results-geo_id-{{ $geo_id }}.csv
     load:
       type: dataset
       num_workers: {{ $.Values.number_of_workers | default 4 }}
