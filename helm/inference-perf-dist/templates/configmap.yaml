@@ -4,24 +4,24 @@ metadata:
   name: {{ .Release.Name }}-config
 data:
 {{- $startTime := now | unixEpoch }}
-{{- range $i, $e := until (int .Values.replicaCount) }}
-  config-{{ $i }}.yml: |
+{{- range $geo_id := .Values.dataset.geo_ids }}
+  config-{{ $geo_id }}.yml: |
     data:
       type: geo_dist
-      geo_id: {{ add $i 1 }}
-      path: /data/user_ts_zone_hotspot_combined_zone_{{ add $i 1 }}.parquet
+      geo_id: {{ $geo_id }}
+      path: /data/user_ts_zone_hotspot_combined_zone_{{ $geo_id }}.parquet
       start_timestamp: {{ $startTime }}
       first_record_timestamp: {{ $.Values.dataset.first_record_timestamp }}
       delay_start_seconds: {{ $.Values.dataset.delay_start_seconds }}
+      duration: {{ $.Values.dataset.duration | default 20 }}
+      num_requests: {{ $.Values.dataset.num_requests | default 10 }}
     storage:
       local_storage:
         path: "/reports"
-        report_file_prefix: geo_id-{{ add $i 1 }}-
+        report_file_prefix: geo_id-{{ $geo_id }}-
     load:
-      type: constant
-      stages:
-      - rate: 1
-        duration: 5
+      type: dataset
+      num_workers: {{ $.Values.number_of_workers | default 4 }}
     api:
       type: chat
       streaming: true
@@ -35,7 +35,7 @@ data:
     report:
       request_lifecycle:
         summary: true
-        per_stage: true
+        per_stage: false
         per_request: false
       prometheus:
         summary: true
