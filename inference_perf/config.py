@@ -77,9 +77,9 @@ class DataConfig(BaseModel):
     start_timestamp: Optional[datetime] = None
     first_record_timestamp: Optional[datetime] = None
     delay_start_seconds: Optional[int] = None
-    num_requests: Optional[int] = None
+    num_requests: Optional[int] = -1
     no_wait: bool = False
-    duration: Optional[int] = None 
+    duration: Optional[int] = -1 
 
 
 class ModelServerType(Enum):

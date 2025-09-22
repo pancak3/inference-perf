@@ -67,11 +67,31 @@ class GeoDistributionDataGenerator(DataGenerator):
         self.first_record_ts = first_record_ts
         self.shift_ts = shift_ts
         self.adjustment = time.perf_counter() - datetime.now(timezone.utc).timestamp()
-        self.num_requests = config.num_requests if config.num_requests else self.dataset.height
-        if self.num_requests > self.dataset.height:
-            logger.warning(f"Requested number of records {self.num_requests} exceeds dataset size {self.dataset.height}, using {self.dataset.height}")
-            self.num_requests = self.dataset.height
-        self.duration = config.duration if config.duration else 0
+
+
+        if config.num_requests > 0:
+            self.num_requests = config.num_requests
+            if self.num_requests > self.dataset.height:
+                logger.warning(f"Requested number of records {self.num_requests} is greater than available records {self.dataset.height}. Using available records.")
+                self.num_requests = self.dataset.height
+            elif self.num_requests < self.dataset.height:
+                self.dataset = self.dataset.head(self.num_requests)
+                logger.info(f"Using only the first {self.num_requests} records from the dataset.")
+            self.duration = 0
+        else:
+            if not config.duration > 0:
+                self.num_requests = self.dataset.height
+                self.duration = 0
+            else:
+                self.duration = config.duration
+                min_ts = self.dataset[0, "Timestamp"]
+                end_ts = min_ts + timedelta(seconds=config.duration)
+                self.dataset = self.dataset.filter(self.dataset["Timestamp"] <= end_ts)
+                self.num_requests = self.dataset.height
+        
+        self.num_requests = min(self.num_requests, self.dataset.height)
+        logger.info(f"Number of records after applying duration and/or number of requests filter: {self.dataset.height}")
+        
         self.end_ts = self.start_ts.timestamp() + self.duration + self.adjustment if self.duration > 0 else 0
         self.no_wait = config.no_wait
 
@@ -79,17 +99,9 @@ class GeoDistributionDataGenerator(DataGenerator):
         return [APIType.Completion, APIType.Chat]
 
     def get_data(self) -> Generator[InferenceAPIData, None, None]:
-        if self.api_config.type != APIType.Chat:
-            raise Exception("Unsupported API type")
-        count = 0
         request_send_time = 0
         for row in self.dataset.iter_rows(named=True):
             request_send_time = (row["Timestamp"] + self.shift_ts).replace(tzinfo=timezone.utc).timestamp() + self.adjustment
-            if self.end_ts > 0 and request_send_time >= self.end_ts:
-                if count < self.num_requests:
-                    self.num_requests = count
-                    logger.warning(f"Only {count} requests generated before reaching the duration limit of {self.duration} seconds")
-                break
             user_id = str(row["UserID"])
             conversation_id = row["ConversationID"]
             conversation = row["Conversation"]
@@ -103,10 +115,6 @@ class GeoDistributionDataGenerator(DataGenerator):
             yield DatasetChatCompletionAPIData(
                 messages=messages, max_completion_tokens=max_completion_tokens, request_send_time=request_send_time, 
                 user_id=user_id, conversation_id=conversation_id, turn=turn, model=model, id=record_id)
-            count += 1
-            if count >= self.num_requests:
-                break
-
         
     def is_io_distribution_supported(self) -> bool:
         return False
