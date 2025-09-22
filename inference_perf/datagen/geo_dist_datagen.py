@@ -91,7 +91,9 @@ class GeoDistributionDataGenerator(DataGenerator):
         
         self.num_requests = min(self.num_requests, self.dataset.height)
         logger.info(f"Number of records after applying duration and/or number of requests filter: {self.dataset.height}")
-        
+        first_request_ts = self.dataset[0, "Timestamp"] + self.shift_ts
+        logger.info(f"The first request will be sent at: {first_request_ts}")
+
         self.end_ts = self.start_ts.timestamp() + self.duration + self.adjustment if self.duration > 0 else 0
         self.no_wait = config.no_wait
 

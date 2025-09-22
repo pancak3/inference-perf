@@ -17,6 +17,7 @@ import time
 import multiprocessing as mp
 import logging
 import uvloop
+import os
 from datetime import datetime,timezone
 from inference_perf.client.modelserver.dataset_openai_client import DatasetOpenAIModelServerClient
 from inference_perf.datagen import GeoDistributionDataGenerator
@@ -182,6 +183,8 @@ class ResultDumper:
         with open(self.filename, "w") as f:
             f.write("id,schedule_delay,token_latencies\n")
             f.close()
+        # Set file permissions to be readable by any user (666)
+        os.chmod(self.filename, 0o666)
         # open the file with append mode
         self.file = open(self.filename, "a")
         self.result_queue = result_queue
