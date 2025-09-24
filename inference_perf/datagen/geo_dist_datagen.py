@@ -40,62 +40,58 @@ class GeoDistributionDataGenerator(DataGenerator):
         except Exception as e:
             raise ValueError(f"Failed to read data from {config.path}: {e}")
         
+        self.no_wait = config.no_wait
+        
         if config.first_record_timestamp is None:
             raise ValueError("first_record_timestamp must be provided for GeoDistributionDataGenerator")
         
-        start_ts = config.start_timestamp if config.start_timestamp else datetime.now(timezone.utc)
-        if start_ts.tzinfo is None:
-           start_ts = start_ts.replace(tzinfo=timezone.utc)
-           
-        if config.delay_start_seconds:
-            logger.info(f"Adjusting start time by {config.delay_start_seconds} seconds")
-            start_ts = start_ts + timedelta(seconds=config.delay_start_seconds)
-        first_record_ts: datetime = config.first_record_timestamp
-        if first_record_ts.tzinfo is None:
-            first_record_ts = first_record_ts.replace(tzinfo=timezone.utc)
-
-        shift_ts = start_ts - first_record_ts
-        # get the time shift in microseconds of seconds
-
-        logger.info(f"==== GeoDistributionDataGenerator ===="
-                    f"\n\tData path: {config.path}"
-                    f"\n\tStart timestamp: {start_ts}"
-                    f"\n\tFirst record timestamp: {first_record_ts}"
-                    f"\n\tDelay start seconds: {config.delay_start_seconds}"
-                    f"\n\tTime shift (microseconds): {shift_ts}")
-        self.start_ts = start_ts
-        self.first_record_ts = first_record_ts
-        self.shift_ts = shift_ts
-        self.adjustment = time.perf_counter() - datetime.now(timezone.utc).timestamp()
-
-
-        if config.num_requests > 0:
-            self.num_requests = config.num_requests
-            if self.num_requests > self.dataset.height:
-                logger.warning(f"Requested number of records {self.num_requests} is greater than available records {self.dataset.height}. Using available records.")
-                self.num_requests = self.dataset.height
-            elif self.num_requests < self.dataset.height:
-                self.dataset = self.dataset.head(self.num_requests)
-                logger.info(f"Using only the first {self.num_requests} records from the dataset.")
-            self.duration = 0
-        else:
-            if not config.duration > 0:
-                self.num_requests = self.dataset.height
-                self.duration = 0
-            else:
-                self.duration = config.duration
-                min_ts = self.dataset[0, "Timestamp"]
-                end_ts = min_ts + timedelta(seconds=config.duration)
-                self.dataset = self.dataset.filter(self.dataset["Timestamp"] <= end_ts)
-                self.num_requests = self.dataset.height
+        wall_start_ts = config.start_timestamp if config.start_timestamp else datetime.now()
+        wall_start_ts += timedelta(seconds=config.delay_start_seconds)
         
-        self.num_requests = min(self.num_requests, self.dataset.height)
+        first_ts_all_geo: datetime = config.first_record_timestamp
+        first_ts_all_geo += timedelta(seconds=config.shift_start_seconds)
+        self.shift_ts = wall_start_ts - first_ts_all_geo
+        self.dataset = self.dataset.filter(self.dataset["Timestamp"] >= first_ts_all_geo)
+        self.num_requests = self.dataset.height
+    
+        if config.duration > 0:
+            self.duration = config.duration
+            ds_end_ts = first_ts_all_geo + timedelta(seconds=config.duration)
+            self.dataset = self.dataset.filter(self.dataset["Timestamp"] <= ds_end_ts)
+            self.num_requests = self.dataset.height
+        else:
+            self.duration = 0
+            
+        if config.num_requests > 0:
+            if config.num_requests > self.num_requests:
+                logger.warning(f"Requested number of records {config.num_requests} is greater than available records {self.num_requests}. Using available records.")
+            elif config.num_requests < self.num_requests:
+                self.dataset = self.dataset.head(config.num_requests)
+                logger.info(f"Using only the first {config.num_requests} records from the dataset.")
+                self.num_requests = config.num_requests
+                
         logger.info(f"Number of records after applying duration and/or number of requests filter: {self.dataset.height}")
-        first_request_ts = self.dataset[0, "Timestamp"] + self.shift_ts
-        logger.info(f"The first request will be sent at: {first_request_ts}")
+        
+        
+        additional_log = ""
+        if len(self.dataset) > 0:
+            first_request_ts = self.dataset[0, "Timestamp"] + self.shift_ts
+            current_time = datetime.now()
+            time_diff = (first_request_ts - current_time).total_seconds()
+            additional_log = f"\n\tThe first request will be sent at: {first_request_ts}, {time_diff} seconds from now"
+            
+        logger.info(f"==== GeoDistributionDataGenerator ===="
+            f"\n\tData path: {config.path}"
+            f"\n\tExperiment start timestamp: {wall_start_ts}"
+            f"\n\tWait for other pods (seconds): {config.delay_start_seconds}"
+            f"\n\tFirst record ts among all geo zones: {first_ts_all_geo}"
+            f"\n\tShift start seconds: {config.shift_start_seconds}"
+            f"\n\tDuration (seconds): {self.duration}"
+            f"\n\tNumber of requests: {self.num_requests}"
+            f"\n\tNo wait mode: {self.no_wait}"
+            f"\n\tTime shift (microseconds): {self.shift_ts}" + additional_log)
+        self.adjustment = time.perf_counter() - time.time()
 
-        self.end_ts = self.start_ts.timestamp() + self.duration + self.adjustment if self.duration > 0 else 0
-        self.no_wait = config.no_wait
 
     def get_supported_apis(self) -> List[APIType]:
         return [APIType.Completion, APIType.Chat]
@@ -103,7 +99,7 @@ class GeoDistributionDataGenerator(DataGenerator):
     def get_data(self) -> Generator[InferenceAPIData, None, None]:
         request_send_time = 0
         for row in self.dataset.iter_rows(named=True):
-            request_send_time = (row["Timestamp"] + self.shift_ts).replace(tzinfo=timezone.utc).timestamp() + self.adjustment
+            request_send_time = (row["Timestamp"] + self.shift_ts).timestamp() + self.adjustment
             user_id = str(row["UserID"])
             conversation_id = row["ConversationID"]
             conversation = row["Conversation"]

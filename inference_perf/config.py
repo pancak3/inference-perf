@@ -77,6 +77,7 @@ class DataConfig(BaseModel):
     start_timestamp: Optional[datetime] = None
     first_record_timestamp: Optional[datetime] = None
     delay_start_seconds: Optional[int] = None
+    shift_start_seconds: Optional[int] = 0
     num_requests: Optional[int] = -1
     no_wait: bool = False
     duration: Optional[int] = -1 
