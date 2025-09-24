@@ -29,7 +29,6 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
 
     async def process_request(self, data: DatasetChatCompletionAPIData, scheduled_time: float, detailed_result_queue: mp.Queue) -> None:
         assert isinstance(data, DatasetChatCompletionAPIData)
-        payload = data.to_payload()
         headers = {"Content-Type": "application/json"}
 
         if self.api_key:
@@ -38,8 +37,9 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
         if self.api_config.headers:
             headers.update(self.api_config.headers)
 
+        payload = data.to_payload()
         request_data = json.dumps(payload)
-        request_id = payload.get("id", None)
+        request_id = payload.get("client_side_id", None)
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=self.max_tcp_connections)) as session:
             start = time.perf_counter()
             try:
@@ -47,7 +47,7 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
                     response_info = await data.process_response(
                         response=response, config=self.api_config, tokenizer=self.tokenizer
                     )
-                    detailed_result_queue.put((request_id, scheduled_time, start, response_info.output_token_times))
+                    detailed_result_queue.put((request_id, scheduled_time, start, time.perf_counter(), response_info.output_token_times))
             except Exception as e:
                 logger.error("error occured during request processing:", exc_info=True)
         

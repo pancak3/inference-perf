@@ -110,13 +110,13 @@ class GeoDistributionDataGenerator(DataGenerator):
             turn = row["Turn"]
             max_completion_tokens = row["GeneratedToken"]
             model = row["Model"]
-            record_id = row["ID"]
+            record_id = str(row["ID"])
             messages = []
             for message in conversation[:-1]:
                 messages.append(ChatMessage(role=message["role"], content=message["content"]))
             yield DatasetChatCompletionAPIData(
                 messages=messages, max_completion_tokens=max_completion_tokens, request_send_time=request_send_time, 
-                user_id=user_id, conversation_id=conversation_id, turn=turn, model=model, id=record_id)
+                user_id=user_id, conversation_id=conversation_id, turn=turn, model=model, client_side_id=record_id)
         
     def is_io_distribution_supported(self) -> bool:
         return False

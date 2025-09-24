@@ -222,8 +222,6 @@ def main_cli() -> None:
         tokenizer = model_server_client.tokenizer
     else:
         raise Exception("model server client config missing")
-    print(f"Server type: {config.server.type}")
-    print(isinstance(model_server_client, DatasetOpenAIModelServerClient))
     # Check load exists so datagen can derive total_count from the
     # stage configurations.
     if config.load is None:

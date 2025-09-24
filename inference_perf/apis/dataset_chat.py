@@ -1,6 +1,6 @@
+import time
 from inference_perf.apis.chat import ChatCompletionAPIData
 from typing import Any
-from datetime import datetime
 
 class DatasetChatCompletionAPIData(ChatCompletionAPIData):
     request_send_time: float
@@ -9,7 +9,7 @@ class DatasetChatCompletionAPIData(ChatCompletionAPIData):
     turn: int
     max_completion_tokens: int
     model: str
-    id: int
+    client_side_id: str
     
     def to_payload(self) -> dict[str, Any]:
         if self.max_completion_tokens == 0:
@@ -23,6 +23,7 @@ class DatasetChatCompletionAPIData(ChatCompletionAPIData):
             "user_id": self.user_id,
             "conversation_id": self.conversation_id,
             "turn": self.turn,
-            "id": self.id,
+            "client_side_id": self.client_side_id,
+            "client_sent_at": time.perf_counter(),
         }
     

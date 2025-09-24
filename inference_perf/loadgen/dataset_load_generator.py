@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import tqdm
 import json
 import time
@@ -181,7 +182,7 @@ class ResultDumper:
         self.filename = filename
         self.num_requests = num_requests
         with open(self.filename, "w") as f:
-            f.write("id,schedule_delay,token_latencies\n")
+            f.write("id, schedule_delay, response_delay, token_latencies\n")
             f.close()
         # Set file permissions to be readable by any user (666)
         os.chmod(self.filename, 0o666)
@@ -207,13 +208,14 @@ class ResultDumper:
         logger.info(f"Detailed results written to: {self.filename}")
 
     def dump_result(self, item,) -> None:
-        def floor(num: float) -> float:
-            return float(f"{num:0.6f}")
-        request_id, scheduled_time, start, output_token_times = item
+        def floor(num: float) -> int:
+            return math.floor(num * 1e6)
+        request_id, scheduled_time, start, received_at, output_token_times = item
         if isinstance(output_token_times, list):
             output_token_times = [floor(t - start) if i == 0 else floor(t - output_token_times[i-1]) for i, t in enumerate(output_token_times)]
         schedule_delay = start - scheduled_time
-        line  = f"{request_id},{floor(schedule_delay)},\"{json.dumps(output_token_times)}\"\n"
+        response_delay = received_at - start
+        line  = f"{request_id},{floor(schedule_delay)},{floor(response_delay)},\"{json.dumps(output_token_times)}\"\n"
         self.file.write(line)
         self.file.flush()
         self.pbar.update(1)
