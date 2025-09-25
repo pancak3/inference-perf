@@ -46,6 +46,8 @@ class GeoDistributionDataGenerator(DataGenerator):
             raise ValueError("first_record_timestamp must be provided for GeoDistributionDataGenerator")
         
         wall_start_ts = config.start_timestamp if config.start_timestamp else datetime.now()
+        if wall_start_ts.tzinfo is not None:
+            wall_start_ts = wall_start_ts.astimezone(timezone.utc).replace(tzinfo=None)
         wall_start_ts += timedelta(seconds=config.delay_start_seconds)
         
         first_ts_all_geo: datetime = config.first_record_timestamp
