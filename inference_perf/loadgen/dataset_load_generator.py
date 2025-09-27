@@ -211,11 +211,14 @@ class ResultDumper:
         def floor(num: float) -> int:
             return math.floor(num * 1e6)
         request_id, scheduled_time, start, received_at, output_token_times = item
-        if isinstance(output_token_times, list):
-            output_token_times = [floor(t - start) if i == 0 else floor(t - output_token_times[i-1]) for i, t in enumerate(output_token_times)]
+        token_times = []
+        if len(output_token_times) > 0:
+            token_times.append(floor(output_token_times[0] - start))
+        if len(output_token_times) > 1:
+            token_times.extend([floor(output_token_times[i] - output_token_times[i-1]) for i in range(1, len(output_token_times))])
         schedule_delay = start - scheduled_time
         response_delay = received_at - start
-        line  = f"{request_id},{floor(schedule_delay)},{floor(response_delay)},\"{json.dumps(output_token_times)}\"\n"
+        line  = f"{request_id},{floor(schedule_delay)},{floor(response_delay)},\"{json.dumps(token_times)}\"\n"
         self.file.write(line)
         self.file.flush()
         self.pbar.update(1)
