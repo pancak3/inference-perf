@@ -207,7 +207,7 @@ class ResultDumper:
         self.pbar.close()
         logger.info(f"Detailed results written to: {self.filename}")
 
-    def dump_result(self, item,) -> None:
+    def dump_result(self, item) -> None:
         def floor(num: float) -> int:
             return math.floor(num * 1e6)
         request_id, scheduled_time, start, received_at, output_token_times = item

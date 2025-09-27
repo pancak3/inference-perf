@@ -56,7 +56,6 @@ class ChatCompletionAPIData(InferenceAPIData):
             async for chunk_bytes in response.content:
                 try:
                     chunk_str = chunk_bytes.decode("utf-8").removeprefix("data: ")
-                    output_token_times.append(time.perf_counter())
                 except UnicodeDecodeError:
                     continue
                 for line in chunk_str.splitlines():
@@ -70,6 +69,8 @@ class ChatCompletionAPIData(InferenceAPIData):
                             content = delta.get("content")
                             if content:
                                 output_text += content
+                                output_token_times.append(time.perf_counter())
+                                
                     except (json.JSONDecodeError, IndexError):
                         continue
                 else:
