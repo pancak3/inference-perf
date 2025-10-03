@@ -1,5 +1,5 @@
 # Build stage - install dependencies
-FROM python:3.12.11-alpine3.22 AS builder
+FROM python:3.12.11-slim-bookworm AS builder
 
 # Install PDM
 RUN pip install --no-cache-dir pdm
@@ -9,12 +9,15 @@ WORKDIR /workspace
 # Copy dependency files
 COPY pyproject.toml pdm.lock ./
 
-# Install dependencies using PDM
-RUN pdm sync --prod --no-editable && \
+# Copy source code (needed for PDM to resolve the project)
+COPY inference_perf ./inference_perf
+
+# Install dependencies using PDM (this will create .venv and install all prod dependencies)
+RUN pdm install --prod --no-lock --no-editable && \
     pip cache purge
 
 # Runtime stage - minimal image
-FROM python:3.12.11-alpine3.22
+FROM python:3.12.11-slim-bookworm
 
 WORKDIR /workspace
 
