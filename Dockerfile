@@ -29,7 +29,7 @@ COPY config.yml ./
 COPY inference_perf ./inference_perf
 
 # Set PYTHONPATH and PATH to use virtual environment
-ENV PYTHONPATH=/workspace
+ENV PYTHONPATH=/workspace/inference_perf
 ENV PATH="/workspace/.venv/bin:$PATH"
 
 # Run inference-perf using the virtual environment's Python

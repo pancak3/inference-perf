@@ -194,3 +194,5 @@ config.dev.yml
 
 # helm
 helm/inference-perf-dist/dev.values.yaml
+
+reports/

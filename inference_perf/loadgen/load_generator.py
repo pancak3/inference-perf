@@ -39,10 +39,16 @@ import logging
 import uvloop
 import numpy as np
 from tqdm import tqdm
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
 RequestQueueData: TypeAlias = Tuple[int, InferenceAPIData | int, float]
+
+
+class Status(Enum):
+    STAGE_END = "stage_end"
+    WORKER_STOP = "worker_stop"
 
 
 class Worker(mp.Process):
