@@ -11,21 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
-import tqdm
-import json
-import time
-import multiprocessing as mp
+from __future__ import annotations
+
 import logging
+import multiprocessing as mp
+import time
 import uvloop
-import os
 from datetime import datetime,timezone
+from asyncio import Semaphore, create_task, gather, run, sleep, set_event_loop_policy
+from queue import Empty
+from typing import List, Union
+
+from inference_perf.apis.dataset_chat import DatasetChatCompletionAPIData
 from inference_perf.client.modelserver.dataset_openai_client import DatasetOpenAIModelServerClient
 from inference_perf.datagen import GeoDistributionDataGenerator
 from inference_perf.config import LoadConfig, StorageConfigBase
-from inference_perf.loadgen.load_generator import LoadGenerator, StageRuntimeInfo, Status, RequestQueueData
-from asyncio import Semaphore, create_task, gather, run, sleep, set_event_loop_policy
-from typing import List, Union
+from inference_perf.loadgen.load_generator import LoadGenerator, StageRuntimeInfo, Status
+from inference_perf.loadgen.postgres_logger import PostgresResultLogger
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)
@@ -39,12 +41,14 @@ class DatasetLoadGenerator(LoadGenerator):
         self.workers: List[Worker] = []
         self.worker_max_concurrency = load_config.worker_max_concurrency
         self.local_storage = local_storage
+        self.detailed_result_queue: mp.JoinableQueue = mp.JoinableQueue()
+        self.result_logger = PostgresResultLogger(self.detailed_result_queue)
 
-    async def mp_run(self, client: DatasetOpenAIModelServerClient, detailed_result_queue: mp.Queue) -> None:
-        request_queue: mp.Queue[RequestQueueData] = mp.JoinableQueue()
+    async def mp_run(self, client: DatasetOpenAIModelServerClient) -> None:
+        request_queue: mp.JoinableQueue = mp.JoinableQueue()
 
         for id in range(self.num_workers):
-            self.workers.append(Worker(id, client, request_queue, self.datagen, self.worker_max_concurrency, detailed_result_queue))
+            self.workers.append(Worker(id, client, request_queue, self.datagen, self.worker_max_concurrency, self.detailed_result_queue))
             self.workers[-1].start()
 
         # Allow generation a second to begin populating the queue so the workers
@@ -76,7 +80,6 @@ class DatasetLoadGenerator(LoadGenerator):
 
         logger.debug("Loadgen joining request queue")
         request_queue.join()
-        detailed_result_queue.put(None)  # signal the dumper to stop
         self.stage_runtime_info[0] = StageRuntimeInfo(
             stage_id=0, rate=-1, start_time=start_time_epoch, end_time=datetime.now(timezone.utc).timestamp()
         )
@@ -85,13 +88,11 @@ class DatasetLoadGenerator(LoadGenerator):
             worker.status_queue.put(Status.WORKER_STOP)
 
     async def run(self, client: DatasetOpenAIModelServerClient) -> None:
-        result_queue: mp.Queue = mp.JoinableQueue()
-        assert self.local_storage.path is not None
-        assert self.local_storage.detailed_result_file is not None
-        path = self.local_storage.path + "/" + self.local_storage.detailed_result_file
-        result_dumper = ResultDumper(path, result_queue, self.datagen.num_requests)
-        result_dumper.run()
-        return await self.mp_run(client, result_queue)
+        self.result_logger.start()
+        try:
+            await self.mp_run(client)
+        finally:
+            self.result_logger.stop()
 
     async def stop(self) -> None:
         for worker in self.workers:
@@ -105,25 +106,25 @@ class Worker(mp.Process):
         self,
         id: int,
         client: DatasetOpenAIModelServerClient,
-        request_queue: mp.Queue,  # type: ignore[type-arg]
+    request_queue: mp.JoinableQueue,  # type: ignore[type-arg]
         datagen: GeoDistributionDataGenerator,
         max_concurrency: int,
-        detailed_result_queue: mp.Queue,
+    detailed_result_queue: mp.JoinableQueue,
     ):
         super().__init__()
         self.id = id
         assert isinstance(client, DatasetOpenAIModelServerClient)
         self.client = client
         self.request_queue = request_queue
-        self.status_queue: mp.JoinableQueue[Status] = mp.JoinableQueue()
+        self.status_queue = mp.JoinableQueue()
         self.max_concurrency = max_concurrency
-        self.datagen: GeoDistributionDataGenerator = datagen
+        self.datagen = datagen
         self.detailed_result_queue = detailed_result_queue
 
     def check_status(self) -> Union[Status, None]:
         try:
             return self.status_queue.get_nowait()
-        except mp.queues.Empty:
+        except Empty:
             return None
 
     async def loop(self) -> None:
@@ -136,10 +137,10 @@ class Worker(mp.Process):
                 item = self.request_queue.get_nowait()
 
                 async def schedule_client(
-                    queue: mp.Queue,  # type: ignore[type-arg]
-                    request_data: DatasetOpenAIModelServerClient,
+                    queue: mp.JoinableQueue,  # type: ignore[type-arg]
+                    request_data: DatasetChatCompletionAPIData,
                     request_time: float,
-                    detailed_result_queue: mp.Queue
+                    detailed_result_queue: mp.JoinableQueue
                 ) -> None:
                     current_time = time.perf_counter()
                     sleep_time = request_time - current_time if (not self.datagen.no_wait) else 0
@@ -157,7 +158,7 @@ class Worker(mp.Process):
                 task = create_task(schedule_client(self.request_queue, request, request_time, self.detailed_result_queue))
                 tasks.append(task)
                 await sleep(0)
-            except mp.queues.Empty:
+            except Empty:
                 semaphore.release()
                 status = self.check_status()
                 if status is None:
@@ -175,50 +176,3 @@ class Worker(mp.Process):
     def run(self) -> None:
         set_event_loop_policy(uvloop.EventLoopPolicy())
         run(self.loop())
-
-class ResultDumper:
-    def __init__(self, filename: str, result_queue: mp.Queue, num_requests: int) -> None:
-        # open the file and write the header
-        self.filename = filename
-        self.num_requests = num_requests
-        with open(self.filename, "w") as f:
-            f.write("id, schedule_delay, response_delay, token_latencies\n")
-            f.close()
-        # Set file permissions to be readable by any user (666)
-        os.chmod(self.filename, 0o666)
-        # open the file with append mode
-        self.file = open(self.filename, "a")
-        self.result_queue = result_queue
-        self.pbar = tqdm.tqdm(total=self.num_requests, desc="Requests completed", unit="req")
-
-
-    def run(self) -> None:
-        self.process = mp.Process(target=self._run)
-        self.process.start()
-
-    def _run(self) -> None:
-        # write a helper and run as a routine
-        while True:
-            item = self.result_queue.get()
-            if item is None:
-                break
-            self.dump_result(item)
-        self.file.close()
-        self.pbar.close()
-        logger.info(f"Detailed results written to: {self.filename}")
-
-    def dump_result(self, item) -> None:
-        def floor(num: float) -> int:
-            return math.floor(num * 1e6)
-        request_id, scheduled_time, start, received_at, output_token_times = item
-        token_times = []
-        if len(output_token_times) > 0:
-            token_times.append(floor(output_token_times[0] - start))
-        if len(output_token_times) > 1:
-            token_times.extend([floor(output_token_times[i] - output_token_times[i-1]) for i in range(1, len(output_token_times))])
-        schedule_delay = start - scheduled_time
-        response_delay = received_at - start
-        line  = f"{request_id},{floor(schedule_delay)},{floor(response_delay)},\"{json.dumps(token_times)}\"\n"
-        self.file.write(line)
-        self.file.flush()
-        self.pbar.update(1)

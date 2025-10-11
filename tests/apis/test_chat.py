@@ -9,7 +9,7 @@ def test_chat_completion_api_data() -> None:
     assert data.to_payload("test-model", 100, False, False) == {
         "model": "test-model",
         "messages": [{"role": "user", "content": "Hello, world!"}],
-        "max_tokens": 100,
+        "max_completion_tokens": 100,
         "ignore_eos": False,
         "stream": False,
     }
