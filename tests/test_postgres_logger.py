@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import time
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 import pytest
@@ -14,6 +15,10 @@ class RecordingCursor:
 
     def execute(self, statement: Any, params: Any = None) -> None:
         self.connection.executions.append({"statement": statement, "params": params})
+
+    def executemany(self, statement: Any, params_seq: Sequence[Any]) -> None:
+        for params in params_seq:
+            self.execute(statement, params)
 
     def __enter__(self) -> "RecordingCursor":
         return self
@@ -46,7 +51,7 @@ class RecordingConnection:
 
 
 @pytest.fixture(autouse=True)
-def _restore_time() -> None:
+def _restore_time() -> Iterator[None]:
     # Ensure any monkeypatched time functions are restored after each test
     yield
     postgres_logger.time = time
@@ -86,6 +91,7 @@ def test_postgres_logger_persists_records(monkeypatch: pytest.MonkeyPatch, postg
         logger.stop(timeout=1.0)
         queue.close()
 
+
     assert len(connections) >= 2
     worker_connection = connections[1]
     assert worker_connection.commits == 1
@@ -98,3 +104,50 @@ def test_postgres_logger_persists_records(monkeypatch: pytest.MonkeyPatch, postg
 
 def test_to_microseconds() -> None:
     assert to_microseconds(1.2345) == 1_234_500
+
+
+def test_postgres_logger_batches_records(monkeypatch: pytest.MonkeyPatch, postgres_env: None) -> None:
+    monkeypatch.setenv("INFERENCE_DB_BATCH_SIZE", "2")
+    monkeypatch.setenv("INFERENCE_DB_QUEUE_POLL_SECONDS", "0.05")
+    monkeypatch.setenv("INFERENCE_DB_SLEEP_MIN_SECONDS", "0.1")
+    monkeypatch.setenv("INFERENCE_DB_SLEEP_MAX_SECONDS", "0.2")
+
+    connections: list[RecordingConnection] = []
+
+    def fake_connect(*args: Any, **kwargs: Any) -> RecordingConnection:
+        conn = RecordingConnection()
+        connections.append(conn)
+        return conn
+
+    monkeypatch.setattr(postgres_logger.psycopg, "connect", fake_connect)
+    monkeypatch.setattr(postgres_logger.time, "sleep", lambda _seconds: None)
+
+    uniform_calls: list[tuple[float, float]] = []
+
+    def fake_uniform(lower: float, upper: float) -> float:
+        uniform_calls.append((lower, upper))
+        return lower
+
+    monkeypatch.setattr(postgres_logger.random, "uniform", fake_uniform)
+
+    queue: mp.JoinableQueue = mp.JoinableQueue()
+    logger = PostgresResultLogger(queue)
+
+    try:
+        queue.put(("request-1", 0.0, 1.0, 2.0, [1.5]))
+        queue.put(("request-2", 0.0, 2.0, 3.0, [2.5, 2.8]))
+
+        deadline = time.time() + 2
+        while len(connections) < 2 and time.time() < deadline:
+            time.sleep(0.01)
+
+        assert len(connections) >= 2
+        worker_connection = connections[1]
+        params = [call["params"] for call in worker_connection.executions if call["params"]]
+        assert len(params) == 2
+        assert params[0][0] == "request-1"
+        assert params[1][0] == "request-2"
+        assert uniform_calls, "expected random.uniform to be invoked for jitter"
+    finally:
+        logger.stop(timeout=1.0)
+        queue.close()

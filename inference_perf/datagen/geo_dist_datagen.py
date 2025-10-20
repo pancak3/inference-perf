@@ -17,6 +17,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Generator, List, Optional
 from polars import read_parquet, DataFrame
 from pathlib import Path
+
+from tqdm import tqdm
 from inference_perf.apis.dataset_chat import DatasetChatCompletionAPIData
 from inference_perf.config import APIConfig, APIType, DataConfig
 from inference_perf.datagen.base import DataGenerator

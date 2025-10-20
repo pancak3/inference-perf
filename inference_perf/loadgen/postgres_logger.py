@@ -18,14 +18,17 @@ import atexit
 import logging
 import multiprocessing as mp
 import os
+import random
 import sys
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence
+from queue import Empty
+from typing import Any, Optional, Sequence, cast
 
 import psycopg
 from psycopg import sql
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +66,19 @@ class _DatabaseConfig:
 class PostgresResultLogger:
     """Background worker that streams request metrics into PostgreSQL."""
 
-    def __init__(self, result_queue: mp.Queue[Any]):
+    _QUEUE_TIMEOUT = object()
+    _STOP_MARKER = object()
+
+    def __init__(self,num_requests:int,  result_queue: mp.Queue[Any]):
         self._config = self._load_config()
         self._result_queue = result_queue
         self._stop_event = threading.Event()
         self._worker_thread: Optional[threading.Thread] = None
         self._running = False
         self._perf_to_epoch_offset = time.time() - time.perf_counter()
+        self._batch_size = self._load_batch_size()
+        self._queue_poll_timeout = self._load_queue_poll_timeout()
+        self._sleep_bounds = self._load_sleep_bounds()
         self._insert_statement = sql.SQL(
             """
             INSERT INTO {} ("RequestID", "SendAt", "ReceiveFirstTokenAt", "ReceiveLastTokenAt")
@@ -92,6 +101,7 @@ class PostgresResultLogger:
             self._config.table,
         )
         atexit.register(self.stop)
+        self.pbar = tqdm(total=num_requests, desc="Logged requests", position=1, leave=True)
         self.start()
 
     def start(self) -> None:
@@ -105,6 +115,10 @@ class PostgresResultLogger:
     def stop(self, timeout: Optional[float] = None) -> None:
         if not self._running:
             return
+        while True:
+            if self.pbar.n >= self.pbar.total:
+                break
+            time.sleep(5)
         self._stop_event.set()
         if self._worker_thread:
             if self._worker_thread.is_alive():
@@ -155,6 +169,40 @@ class PostgresResultLogger:
             table=table,
         )
 
+    def _load_batch_size(self) -> int:
+        raw_value = os.getenv("INFERENCE_DB_BATCH_SIZE", "100")
+        try:
+            batch_size = int(raw_value)
+        except ValueError as exc:
+            raise ValueError("Invalid INFERENCE_DB_BATCH_SIZE value") from exc
+        if batch_size <= 0:
+            raise ValueError("INFERENCE_DB_BATCH_SIZE must be greater than zero")
+        return batch_size
+
+    def _load_queue_poll_timeout(self) -> float:
+        raw_value = os.getenv("INFERENCE_DB_QUEUE_POLL_SECONDS", "1.0")
+        try:
+            timeout = float(raw_value)
+        except ValueError as exc:
+            raise ValueError("Invalid INFERENCE_DB_QUEUE_POLL_SECONDS value") from exc
+        if timeout <= 0:
+            raise ValueError("INFERENCE_DB_QUEUE_POLL_SECONDS must be greater than zero")
+        return timeout
+
+    def _load_sleep_bounds(self) -> tuple[float, float]:
+        min_raw = os.getenv("INFERENCE_DB_SLEEP_MIN_SECONDS", "0.01")
+        max_raw = os.getenv("INFERENCE_DB_SLEEP_MAX_SECONDS", "1")
+        try:
+            minimum = float(min_raw)
+            maximum = float(max_raw)
+        except ValueError as exc:
+            raise ValueError("Invalid INFERENCE_DB_SLEEP_*_SECONDS value") from exc
+        if minimum <= 0 or maximum <= 0:
+            raise ValueError("Sleep bounds must be positive")
+        if maximum < minimum:
+            raise ValueError("INFERENCE_DB_SLEEP_MAX_SECONDS must be >= INFERENCE_DB_SLEEP_MIN_SECONDS")
+        return (minimum, maximum)
+
     def _test_connection(self) -> None:
         try:
             with psycopg.connect(**self._config.connection_kwargs, connect_timeout=self._config.connect_timeout) as conn:
@@ -166,28 +214,71 @@ class PostgresResultLogger:
 
     def _run(self) -> None:
         logger.debug("PostgresResultLogger worker started")
+        buffered_items: list[Sequence[Any]] = []
         try:
-            with psycopg.connect(**self._config.connection_kwargs, connect_timeout=self._config.connect_timeout) as conn:
-                conn.autocommit = False
-                with conn.cursor() as cur:
-                    cur.execute(self._search_path_statement)
-                    while True:
-                        item = self._result_queue.get()
-                        if item is None:
-                            break
-                        try:
-                            request_id, send_at, first_token_at, last_token_at = self._transform_item(item)
-                            cur.execute(
-                                self._insert_statement,
-                                (request_id, send_at, first_token_at, last_token_at),
-                            )
-                            conn.commit()
-                        except Exception as exc:  # pragma: no cover - runtime error logging
-                            conn.rollback()
-                            logger.error("Failed to persist metrics for request %s: %s", item[0], exc, exc_info=True)
+            while True:
+                item = self._get_next_item()
+                if item is self._STOP_MARKER:
+                    if buffered_items:
+                        success = self._flush_batch(buffered_items, is_final=True)
+                        if success:
+                            buffered_items.clear()
+                    break
+                if item is self._QUEUE_TIMEOUT:
+                    if buffered_items:
+                        success = self._flush_batch(buffered_items)
+                        if success:
+                            buffered_items.clear()
+                        if not self._stop_event.is_set():
+                            self._sleep_with_jitter()
+                    continue
+
+                buffered_items.append(cast(Sequence[Any], item))
+                if len(buffered_items) >= self._batch_size:
+                    success = self._flush_batch(buffered_items)
+                    if success:
+                        buffered_items.clear()
+                    if not self._stop_event.is_set():
+                        self._sleep_with_jitter()
         finally:
             self._running = False
             logger.debug("PostgresResultLogger worker stopped")
+
+    def _get_next_item(self) -> object:
+        try:
+            item = self._result_queue.get(timeout=self._queue_poll_timeout)
+        except Empty:
+            return self._QUEUE_TIMEOUT
+        if item is None:
+            return self._STOP_MARKER
+        return item
+
+    def _flush_batch(self, items: Sequence[Sequence[Any]], is_final: bool = False) -> bool:
+        items_snapshot = list(items)
+        if not items_snapshot:
+            return True
+
+        payload = [self._transform_item(item) for item in items_snapshot]
+        logger.debug("Flushing %d request metrics to Postgres", len(payload))
+        try:
+            with psycopg.connect(**self._config.connection_kwargs, connect_timeout=self._config.connect_timeout) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(self._search_path_statement)
+                    cur.executemany(self._insert_statement, payload)
+                conn.commit()
+        except Exception as exc:  # pragma: no cover - runtime error logging
+            logger.error("Failed to persist batch of %d metrics: %s", len(payload), exc, exc_info=True)
+            return False
+        self.pbar.update(len(payload))
+        return True
+
+    def _sleep_with_jitter(self) -> None:
+        if self._stop_event.is_set():
+            return
+        lower, upper = self._sleep_bounds
+        delay = random.uniform(lower, upper)
+        logger.debug("Sleeping %.2f seconds before next DB flush", delay)
+        time.sleep(delay)
 
     def _transform_item(self, item: Sequence[Any]) -> tuple[str, int, int, int]:
         request_id, _scheduled_time, start, received_at, output_token_times = item

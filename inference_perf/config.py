@@ -76,11 +76,11 @@ class DataConfig(BaseModel):
     geo_id: Optional[int] = None
     start_timestamp: Optional[datetime] = None
     first_record_timestamp: Optional[datetime] = None
-    delay_start_seconds: Optional[int] = None
-    shift_start_seconds: Optional[int] = 0
-    num_requests: Optional[int] = -1
+    delay_start_seconds: int = 0
+    shift_start_seconds: int = 0
+    num_requests: int = -1
     no_wait: bool = False
-    duration: Optional[int] = -1 
+    duration: int = -1
 
 
 class ModelServerType(Enum):

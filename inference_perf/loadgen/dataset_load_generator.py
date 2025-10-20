@@ -42,7 +42,7 @@ class DatasetLoadGenerator(LoadGenerator):
         self.worker_max_concurrency = load_config.worker_max_concurrency
         self.local_storage = local_storage
         self.detailed_result_queue: mp.JoinableQueue = mp.JoinableQueue()
-        self.result_logger = PostgresResultLogger(self.detailed_result_queue)
+        self.result_logger = PostgresResultLogger(self.datagen.dataset.height, self.detailed_result_queue)
 
     async def mp_run(self, client: DatasetOpenAIModelServerClient) -> None:
         request_queue: mp.JoinableQueue = mp.JoinableQueue()
