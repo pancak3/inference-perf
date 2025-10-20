@@ -115,11 +115,7 @@ class PostgresResultLogger:
     def stop(self, timeout: Optional[float] = None) -> None:
         if not self._running:
             return
-        while True:
-            if self.pbar.n >= self.pbar.total:
-                break
-            time.sleep(5)
-        self._stop_event.set()
+        self._stop_event.wait()
         if self._worker_thread:
             if self._worker_thread.is_alive():
                 try:
@@ -270,6 +266,9 @@ class PostgresResultLogger:
             logger.error("Failed to persist batch of %d metrics: %s", len(payload), exc, exc_info=True)
             return False
         self.pbar.update(len(payload))
+        if self.pbar.n >= self.pbar.total:
+            self.pbar.close()
+            self._stop_event.set()
         return True
 
     def _sleep_with_jitter(self) -> None:
