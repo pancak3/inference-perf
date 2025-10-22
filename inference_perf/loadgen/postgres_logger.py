@@ -81,12 +81,14 @@ class PostgresResultLogger:
         self._sleep_bounds = self._load_sleep_bounds()
         self._insert_statement = sql.SQL(
             """
-            INSERT INTO {} ("RequestID", "SendAt", "ReceiveFirstTokenAt", "ReceiveLastTokenAt")
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO {} ("RequestID", "SendAt", "ReceiveFirstTokenAt", "ReceiveLastTokenAt", "MaxCompletionTokens", "GeneratedTokens")
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT ("RequestID") DO UPDATE
             SET "SendAt" = EXCLUDED."SendAt",
                 "ReceiveFirstTokenAt" = EXCLUDED."ReceiveFirstTokenAt",
-                "ReceiveLastTokenAt" = EXCLUDED."ReceiveLastTokenAt"
+                "ReceiveLastTokenAt" = EXCLUDED."ReceiveLastTokenAt",
+                "MaxCompletionTokens" = EXCLUDED."MaxCompletionTokens",
+                "GeneratedTokens" = EXCLUDED."GeneratedTokens"
             """
         ).format(sql.Identifier(self._config.schema, self._config.table))
         self._search_path_statement = sql.SQL("SET search_path TO {};").format(sql.Identifier(self._config.schema))
@@ -279,8 +281,8 @@ class PostgresResultLogger:
         logger.debug("Sleeping %.2f seconds before next DB flush", delay)
         time.sleep(delay)
 
-    def _transform_item(self, item: Sequence[Any]) -> tuple[str, int, int, int]:
-        request_id, _scheduled_time, start, received_at, output_token_times = item
+    def _transform_item(self, item: Sequence[Any]) -> tuple[str, int, int, int, int, int]:
+        request_id, _scheduled_time, start, received_at, output_token_times, max_completion_tokens = item
         if request_id is None:
             raise ValueError("RequestID is missing from metrics payload")
 
@@ -292,11 +294,14 @@ class PostgresResultLogger:
             first_token_epoch = self._perf_to_epoch(received_at)
             last_token_epoch = self._perf_to_epoch(received_at)
 
+        n_generated_tokens = len(output_token_times)
         return (
             str(request_id),
             to_microseconds(send_at_epoch),
             to_microseconds(first_token_epoch),
             to_microseconds(last_token_epoch),
+            max_completion_tokens,
+            n_generated_tokens,
         )
 
     def _perf_to_epoch(self, perf_ts: float) -> float:

@@ -38,6 +38,7 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
             headers.update(self.api_config.headers)
 
         payload = data.to_payload()
+        max_completion_tokens = payload['max_completion_tokens']
         request_data = json.dumps(payload)
         request_id = payload.get("client_side_id", None)
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=self.max_tcp_connections)) as session:
@@ -47,7 +48,7 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
                     response_info = await data.process_response(
                         response=response, config=self.api_config, tokenizer=self.tokenizer
                     )
-                    detailed_result_queue.put((request_id, scheduled_time, start, time.perf_counter(), response_info.output_token_times))
+                    detailed_result_queue.put((request_id, scheduled_time, start, time.perf_counter(), response_info.output_token_times, max_completion_tokens))
             except Exception as e:
                 logger.error("error occured during request processing:", exc_info=True)
         
