@@ -88,13 +88,13 @@ class DatasetLoadGenerator(LoadGenerator):
             worker.status_queue.put(Status.WORKER_STOP)
 
     async def run(self, client: DatasetOpenAIModelServerClient) -> None:
-        self.result_logger.start()
-        if self.datagen.dataset.height <= 0:
-            self.result_logger.stop_event.set()
+        if self.datagen.dataset.height > 0:
+            self.result_logger.start()
         try:
             await self.mp_run(client)
         finally:
-            self.result_logger.stop()
+            if self.datagen.dataset.height > 0:
+                self.result_logger.stop()
 
     async def stop(self) -> None:
         for worker in self.workers:

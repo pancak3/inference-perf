@@ -92,7 +92,12 @@ class PostgresResultLogger:
             """
         ).format(sql.Identifier(self._config.schema, self._config.table))
         self._search_path_statement = sql.SQL("SET search_path TO {};").format(sql.Identifier(self._config.schema))
+        self._number_of_requests = num_requests
 
+
+    def start(self) -> None:
+        if self._running:
+            return
         self._test_connection()
         logger.info(
             "Connected to Postgres host=%s port=%s db=%s schema=%s table=%s",
@@ -103,12 +108,7 @@ class PostgresResultLogger:
             self._config.table,
         )
         atexit.register(self.stop)
-        self.pbar = tqdm(total=num_requests, desc="Logged requests", position=0, leave=True)
-        self.start()
-
-    def start(self) -> None:
-        if self._running:
-            return
+        self.pbar = tqdm(total=self._number_of_requests, desc="Logged requests", position=0, leave=True)
         self.stop_event = threading.Event()
         self._worker_thread = threading.Thread(target=self._run, name="PostgresResultLogger", daemon=True)
         self._running = True
