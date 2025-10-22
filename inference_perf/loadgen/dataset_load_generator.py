@@ -88,6 +88,9 @@ class DatasetLoadGenerator(LoadGenerator):
             worker.status_queue.put(Status.WORKER_STOP)
 
     async def run(self, client: DatasetOpenAIModelServerClient) -> None:
+        if self.datagen.dataset.height <= 0:
+            logger.warning("Dataset is empty, no requests to send")
+            return
         self.result_logger.start()
         try:
             await self.mp_run(client)

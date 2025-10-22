@@ -103,7 +103,7 @@ class PostgresResultLogger:
             self._config.table,
         )
         atexit.register(self.stop)
-        self.pbar = tqdm(total=num_requests, desc="Logged requests", position=1, leave=True)
+        self.pbar = tqdm(total=num_requests, desc="Logged requests", position=0, leave=True)
         self.start()
 
     def start(self) -> None:
