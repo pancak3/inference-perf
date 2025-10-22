@@ -72,7 +72,7 @@ class PostgresResultLogger:
     def __init__(self,num_requests:int,  result_queue: mp.Queue[Any]):
         self._config = self._load_config()
         self._result_queue = result_queue
-        self._stop_event = threading.Event()
+        self.stop_event = threading.Event()
         self._worker_thread: Optional[threading.Thread] = None
         self._running = False
         self._perf_to_epoch_offset = time.time() - time.perf_counter()
@@ -109,7 +109,7 @@ class PostgresResultLogger:
     def start(self) -> None:
         if self._running:
             return
-        self._stop_event = threading.Event()
+        self.stop_event = threading.Event()
         self._worker_thread = threading.Thread(target=self._run, name="PostgresResultLogger", daemon=True)
         self._running = True
         self._worker_thread.start()
@@ -117,7 +117,7 @@ class PostgresResultLogger:
     def stop(self, timeout: Optional[float] = None) -> None:
         if not self._running:
             return
-        self._stop_event.wait()
+        self.stop_event.wait()
         if self._worker_thread:
             if self._worker_thread.is_alive():
                 try:
@@ -227,7 +227,7 @@ class PostgresResultLogger:
                         success = self._flush_batch(buffered_items)
                         if success:
                             buffered_items.clear()
-                        if not self._stop_event.is_set():
+                        if not self.stop_event.is_set():
                             self._sleep_with_jitter()
                     continue
 
@@ -236,7 +236,7 @@ class PostgresResultLogger:
                     success = self._flush_batch(buffered_items)
                     if success:
                         buffered_items.clear()
-                    if not self._stop_event.is_set():
+                    if not self.stop_event.is_set():
                         self._sleep_with_jitter()
         finally:
             self._running = False
@@ -270,11 +270,11 @@ class PostgresResultLogger:
         self.pbar.update(len(payload))
         if self.pbar.n >= self.pbar.total:
             self.pbar.close()
-            self._stop_event.set()
+            self.stop_event.set()
         return True
 
     def _sleep_with_jitter(self) -> None:
-        if self._stop_event.is_set():
+        if self.stop_event.is_set():
             return
         lower, upper = self._sleep_bounds
         delay = random.uniform(lower, upper)
