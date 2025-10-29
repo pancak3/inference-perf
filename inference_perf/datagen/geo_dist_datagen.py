@@ -110,7 +110,7 @@ class GeoDistributionDataGenerator(DataGenerator):
             turn = row["Turn"]
             max_completion_tokens = row["GeneratedToken"]
             # model = row["Model"]
-            model = "Qwen/Qwen3-0.6B" # <- to debug vllm
+            model = "Qwen/Qwen3-14B" # <- to debug vllm
             record_id = str(row["ID"])
             messages = []
             for message in conversation[:-1]:

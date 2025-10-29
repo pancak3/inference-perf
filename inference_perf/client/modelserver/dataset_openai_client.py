@@ -41,7 +41,10 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
         max_completion_tokens = payload['max_completion_tokens']
         request_data = json.dumps(payload)
         request_id = payload.get("client_side_id", None)
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=self.max_tcp_connections)) as session:
+        timeout = aiohttp.ClientTimeout(total=600 * self.max_tcp_connections, connect=self.max_tcp_connections)  # set timeouts as needed
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(limit=self.max_tcp_connections),
+            timeout=timeout) as session:
             start = time.perf_counter()
             try:
                 async with session.post(self.uri + data.get_route(), headers=headers, data=request_data) as response:
