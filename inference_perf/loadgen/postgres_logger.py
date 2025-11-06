@@ -33,7 +33,11 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 _MICROSECONDS_PER_SECOND = 1_000_000
-
+if  "DOWN_SAMPLE_GEO_DATASET" in os.environ:
+    try:
+        DOWN_SAMPLE_GEO_DATASET = int(os.environ["DOWN_SAMPLE_GEO_DATASET"])
+    except ValueError:
+        DOWN_SAMPLE_GEO_DATASET = 0
 
 def to_microseconds(timestamp_seconds: float) -> int:
     return int(timestamp_seconds * _MICROSECONDS_PER_SECOND)
@@ -81,14 +85,15 @@ class PostgresResultLogger:
         self._sleep_bounds = self._load_sleep_bounds()
         self._insert_statement = sql.SQL(
             """
-            INSERT INTO {} ("RequestID", "SendAt", "ReceiveFirstTokenAt", "ReceiveLastTokenAt", "MaxCompletionTokens", "GeneratedTokens")
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO {} ("RequestID", "SendAt", "ReceiveFirstTokenAt", "ReceiveLastTokenAt", "MaxCompletionTokens", "GeneratedTokens", "ResponseStatus")
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT ("RequestID") DO UPDATE
             SET "SendAt" = EXCLUDED."SendAt",
                 "ReceiveFirstTokenAt" = EXCLUDED."ReceiveFirstTokenAt",
                 "ReceiveLastTokenAt" = EXCLUDED."ReceiveLastTokenAt",
                 "MaxCompletionTokens" = EXCLUDED."MaxCompletionTokens",
-                "GeneratedTokens" = EXCLUDED."GeneratedTokens"
+                "GeneratedTokens" = EXCLUDED."GeneratedTokens",
+                "ResponseStatus" = EXCLUDED."ResponseStatus"
             """
         ).format(sql.Identifier(self._config.schema, self._config.table))
         self._search_path_statement = sql.SQL("SET search_path TO {};").format(sql.Identifier(self._config.schema))
@@ -267,7 +272,10 @@ class PostgresResultLogger:
         except Exception as exc:  # pragma: no cover - runtime error logging
             logger.error("Failed to persist batch of %d metrics: %s", len(payload), exc, exc_info=True)
             return False
-        self.pbar.update(len(payload))
+        n = len(payload)
+        if DOWN_SAMPLE_GEO_DATASET > 0:
+            n = n * DOWN_SAMPLE_GEO_DATASET
+        self.pbar.update(n)
         if self.pbar.n >= self.pbar.total:
             self.pbar.close()
             self.stop_event.set()
@@ -281,8 +289,8 @@ class PostgresResultLogger:
         logger.debug("Sleeping %.2f seconds before next DB flush", delay)
         time.sleep(delay)
 
-    def _transform_item(self, item: Sequence[Any]) -> tuple[str, int, int, int, int, int]:
-        request_id, _scheduled_time, start, received_at, output_token_times, max_completion_tokens = item
+    def _transform_item(self, item: Sequence[Any]) -> tuple[str, int, int, int, int, int, int]:
+        request_id, response_status, _scheduled_time, start, received_at, output_token_times, max_completion_tokens = item
         if request_id is None:
             raise ValueError("RequestID is missing from metrics payload")
 
@@ -302,6 +310,7 @@ class PostgresResultLogger:
             to_microseconds(last_token_epoch),
             max_completion_tokens,
             n_generated_tokens,
+            response_status,
         )
 
     def _perf_to_epoch(self, perf_ts: float) -> float:

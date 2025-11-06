@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import multiprocessing as mp
+import os
 import time
 import uvloop
 from datetime import datetime,timezone
@@ -108,7 +109,7 @@ class Worker(mp.Process):
         self,
         id: int,
         client: DatasetOpenAIModelServerClient,
-    request_queue: mp.JoinableQueue,  # type: ignore[type-arg]
+        request_queue: mp.JoinableQueue,  # type: ignore[type-arg]
         datagen: GeoDistributionDataGenerator,
         max_concurrency: int,
     detailed_result_queue: mp.JoinableQueue,
@@ -132,12 +133,23 @@ class Worker(mp.Process):
     async def loop(self) -> None:
         semaphore = Semaphore(self.max_concurrency)
         tasks = []
-
+        count = 0
+        if  "DOWN_SAMPLE_GEO_DATASET" in os.environ:
+            try:
+                down_sample_geo_dataset = int(os.environ["DOWN_SAMPLE_GEO_DATASET"])
+            except ValueError:
+                down_sample_geo_dataset = 0
         while True:
             try:
                 await semaphore.acquire()
                 item = self.request_queue.get_nowait()
-
+                #### temp patch to downsample ####
+                if  down_sample_geo_dataset:
+                    count += 1
+                    if count % down_sample_geo_dataset == 0:
+                        count = 0
+                        continue 
+                #### temp patch to downsample ####
                 async def schedule_client(
                     queue: mp.JoinableQueue,  # type: ignore[type-arg]
                     request_data: DatasetChatCompletionAPIData,

@@ -51,7 +51,7 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
                     response_info = await data.process_response(
                         response=response, config=self.api_config, tokenizer=self.tokenizer
                     )
-                    detailed_result_queue.put((request_id, scheduled_time, start, time.perf_counter(), response_info.output_token_times, max_completion_tokens))
+                    detailed_result_queue.put((request_id, response.status, scheduled_time, start, time.perf_counter(), response_info.output_token_times, max_completion_tokens))
             except Exception as e:
                 logger.error("error occured during request processing:", exc_info=True)
-        
+                detailed_result_queue.put((request_id, -1, scheduled_time, start, time.perf_counter(), [], max_completion_tokens))    

@@ -13,6 +13,7 @@
 # limitations under the License.
 import logging
 import time
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Generator, List, Optional
 from polars import read_parquet, DataFrame
@@ -38,7 +39,7 @@ class GeoDistributionDataGenerator(DataGenerator):
         try:
             self.dataset: DataFrame = read_parquet(config.path)
             # the datasets are alredy sorted by timestamp
-            # self.dataset: DataFrame = self.dataset.sort("Timestamp")
+            self.dataset: DataFrame = self.dataset.sort("Timestamp")
         except Exception as e:
             raise ValueError(f"Failed to read data from {config.path}: {e}")
         
@@ -110,7 +111,10 @@ class GeoDistributionDataGenerator(DataGenerator):
             turn = row["Turn"]
             max_completion_tokens = row["GeneratedToken"]
             # model = row["Model"]
-            model = "Qwen/Qwen3-14B" # <- to debug vllm
+            if "REQUEST_MODEL" in os.environ:
+                model = os.environ["REQUEST_MODEL"]
+            else:
+                model = row["Model"]
             record_id = str(row["ID"])
             messages = []
             for message in conversation[:-1]:
