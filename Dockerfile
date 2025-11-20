@@ -32,5 +32,5 @@ COPY inference_perf ./inference_perf
 ENV PYTHONPATH=/workspace/inference_perf
 ENV PATH="/workspace/.venv/bin:$PATH"
 
-# Run inference-perf using the virtual environment's Python
-CMD ["python", "inference_perf/main.py", "--config_file", "config.yml"]
+COPY run.sh .
+CMD ["./run.sh"]

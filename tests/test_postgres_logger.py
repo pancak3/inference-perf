@@ -82,10 +82,11 @@ def test_postgres_logger_persists_records(monkeypatch: pytest.MonkeyPatch, postg
     monkeypatch.setattr(postgres_logger.time, "perf_counter", lambda: 500.0)
 
     queue: mp.JoinableQueue = mp.JoinableQueue()
-    logger = PostgresResultLogger(queue)
+    logger = PostgresResultLogger(1, queue)
+    logger.start()
 
     try:
-        queue.put(("request-1", 0.0, 10.0, 13.0, [11.0, 12.0]))
+        queue.put(("request-1", 200, 0.0, 10.0, 13.0, [11.0, 12.0], 256))
         logger.stop(timeout=1.0)
     finally:
         logger.stop(timeout=1.0)
@@ -99,7 +100,7 @@ def test_postgres_logger_persists_records(monkeypatch: pytest.MonkeyPatch, postg
     insert_calls = [call for call in worker_connection.executions if call["params"]]
     assert insert_calls, "expected INSERT execution with parameters"
     params = insert_calls[-1]["params"]
-    assert params == ("request-1", 510_000_000, 511_000_000, 512_000_000)
+    assert params == ("request-1", 510_000_000, 511_000_000, 512_000_000, 256, 2, 200)
 
 
 def test_to_microseconds() -> None:
@@ -122,20 +123,13 @@ def test_postgres_logger_batches_records(monkeypatch: pytest.MonkeyPatch, postgr
     monkeypatch.setattr(postgres_logger.psycopg, "connect", fake_connect)
     monkeypatch.setattr(postgres_logger.time, "sleep", lambda _seconds: None)
 
-    uniform_calls: list[tuple[float, float]] = []
-
-    def fake_uniform(lower: float, upper: float) -> float:
-        uniform_calls.append((lower, upper))
-        return lower
-
-    monkeypatch.setattr(postgres_logger.random, "uniform", fake_uniform)
-
     queue: mp.JoinableQueue = mp.JoinableQueue()
-    logger = PostgresResultLogger(queue)
+    logger = PostgresResultLogger(2, queue)
+    logger.start()
 
     try:
-        queue.put(("request-1", 0.0, 1.0, 2.0, [1.5]))
-        queue.put(("request-2", 0.0, 2.0, 3.0, [2.5, 2.8]))
+        queue.put(("request-1", 200, 0.0, 1.0, 2.0, [1.5], 128))
+        queue.put(("request-2", 200, 0.0, 2.0, 3.0, [2.5, 2.8], 256))
 
         deadline = time.time() + 2
         while len(connections) < 2 and time.time() < deadline:
@@ -147,7 +141,6 @@ def test_postgres_logger_batches_records(monkeypatch: pytest.MonkeyPatch, postgr
         assert len(params) == 2
         assert params[0][0] == "request-1"
         assert params[1][0] == "request-2"
-        assert uniform_calls, "expected random.uniform to be invoked for jitter"
     finally:
         logger.stop(timeout=1.0)
         queue.close()

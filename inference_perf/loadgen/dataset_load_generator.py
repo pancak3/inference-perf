@@ -134,11 +134,12 @@ class Worker(mp.Process):
         semaphore = Semaphore(self.max_concurrency)
         tasks = []
         count = 0
+        down_sample_geo_dataset = 0
         if  "DOWN_SAMPLE_GEO_DATASET" in os.environ:
             try:
                 down_sample_geo_dataset = int(os.environ["DOWN_SAMPLE_GEO_DATASET"])
             except ValueError:
-                down_sample_geo_dataset = 0
+                logger.debug(f"[Worker {self.id}] invalid DOWN_SAMPLE_GEO_DATASET value, defaulting to 0")
         while True:
             try:
                 await semaphore.acquire()
@@ -148,6 +149,10 @@ class Worker(mp.Process):
                     count += 1
                     if count % down_sample_geo_dataset == 0:
                         count = 0
+                    else:
+                        self.request_queue.task_done()
+                        semaphore.release()
+                        await sleep(0)
                         continue 
                 #### temp patch to downsample ####
                 async def schedule_client(
@@ -163,9 +168,11 @@ class Worker(mp.Process):
                         await sleep(sleep_time)
                     else:
                         logger.debug(f"Worker {self.id} missed scheduled request time by {-1.0 * sleep_time:0.2f}")
-                    await self.client.process_request(request_data, request_time, detailed_result_queue)
-                    queue.task_done()
-                    semaphore.release()
+                    try:
+                        await self.client.process_request(request_data, request_time, detailed_result_queue)
+                    finally:
+                        queue.task_done()
+                        semaphore.release()
 
                 _, request = item
                 request_time = request.request_send_time

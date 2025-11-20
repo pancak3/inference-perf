@@ -31,6 +31,8 @@ api:
   headers:          # Add custom http headers to the request sent to the inference server
     x-inference-model: llama
     x-routing-strategy: round-robin
+  request_timeout_seconds: 600   # Maximum time to wait for a full response before cancelling a request (default: 600)
+  connect_timeout_seconds: 30    # Maximum time to establish a TCP connection (default: 30)
 ```  
 
 ### Data Generation

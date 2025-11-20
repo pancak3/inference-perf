@@ -14,6 +14,7 @@
 import logging
 import time
 import os
+import polars as pl
 from datetime import datetime, timedelta, timezone
 from typing import Generator, List, Optional
 from polars import read_parquet, DataFrame
@@ -28,6 +29,33 @@ from inference_perf.utils.custom_tokenizer import CustomTokenizer
 
 logger = logging.getLogger(__name__)
 
+
+
+
+ACCELERATION_FACTOR = 1
+if "ACCELERATION_FACTOR" in os.environ:
+    try:
+        ACCELERATION_FACTOR = int(os.environ["ACCELERATION_FACTOR"])
+        logger.info(f"Using ACCELERATION_FACTOR={ACCELERATION_FACTOR}")
+    except ValueError:
+        logger.debug("invalid ACCELERATION_FACTOR value, defaulting to 1")
+
+
+REQUEST_MODEL = ""
+if "REQUEST_MODEL" in os.environ:
+    REQUEST_MODEL = os.environ["REQUEST_MODEL"]
+    logger.info(f"Using REQUEST_MODEL={REQUEST_MODEL}")
+
+
+MAX_COMPLETION_TOKENS = 0
+if "MAX_COMPLETION_TOKENS" in os.environ:
+    try:
+        MAX_COMPLETION_TOKENS = int(os.environ["MAX_COMPLETION_TOKENS"])
+        logger.info(f"Using MAX_COMPLETION_TOKENS={MAX_COMPLETION_TOKENS}")
+    except ValueError:
+        logger.debug("invalid MAX_COMPLETION_TOKENS value, defaulting to 0")
+
+
 class GeoDistributionDataGenerator(DataGenerator):
     def __init__(self, api_config: APIConfig, config: DataConfig, tokenizer: Optional[CustomTokenizer]) -> None:
         super().__init__(api_config, config, tokenizer)
@@ -40,6 +68,11 @@ class GeoDistributionDataGenerator(DataGenerator):
             self.dataset: DataFrame = read_parquet(config.path)
             # the datasets are alredy sorted by timestamp
             self.dataset: DataFrame = self.dataset.sort("Timestamp")
+            if ACCELERATION_FACTOR > 1:
+                min_ts = self.dataset["Timestamp"].min()
+                self.dataset = self.dataset.with_columns(
+                    (min_ts + (pl.col("Timestamp") - min_ts) / ACCELERATION_FACTOR).alias("Timestamp")
+                )
         except Exception as e:
             raise ValueError(f"Failed to read data from {config.path}: {e}")
         
@@ -54,14 +87,14 @@ class GeoDistributionDataGenerator(DataGenerator):
         wall_start_ts += timedelta(seconds=config.delay_start_seconds)
         
         first_ts_all_geo: datetime = config.first_record_timestamp
-        first_ts_all_geo += timedelta(seconds=config.shift_start_seconds)
-        self.shift_ts = wall_start_ts - first_ts_all_geo
+        first_ts_all_geo += timedelta(seconds=config.shift_start_seconds / ACCELERATION_FACTOR)
+        self.shift_ts = (wall_start_ts - first_ts_all_geo)
         self.dataset = self.dataset.filter(self.dataset["Timestamp"] >= first_ts_all_geo)
         self.num_requests = self.dataset.height
     
         if config.duration > 0:
-            self.duration = config.duration
-            ds_end_ts = first_ts_all_geo + timedelta(seconds=config.duration)
+            self.duration = config.duration / ACCELERATION_FACTOR
+            ds_end_ts = first_ts_all_geo + timedelta(seconds=self.duration)
             self.dataset = self.dataset.filter(self.dataset["Timestamp"] <= ds_end_ts)
             self.num_requests = self.dataset.height
         else:
@@ -90,6 +123,7 @@ class GeoDistributionDataGenerator(DataGenerator):
             f"\n\tExperiment start timestamp: {wall_start_ts}"
             f"\n\tWait for other pods (seconds): {config.delay_start_seconds}"
             f"\n\tFirst record ts among all geo zones: {first_ts_all_geo}"
+            f"\n\tAcceleration factor: {ACCELERATION_FACTOR}"
             f"\n\tShift start seconds: {config.shift_start_seconds}"
             f"\n\tDuration (seconds): {self.duration}"
             f"\n\tNumber of requests: {self.num_requests}"
@@ -109,12 +143,8 @@ class GeoDistributionDataGenerator(DataGenerator):
             conversation_id = row["ConversationID"]
             conversation = row["Conversation"]
             turn = row["Turn"]
-            max_completion_tokens = row["GeneratedToken"]
-            # model = row["Model"]
-            if "REQUEST_MODEL" in os.environ:
-                model = os.environ["REQUEST_MODEL"]
-            else:
-                model = row["Model"]
+            max_completion_tokens = row["GeneratedToken"] if MAX_COMPLETION_TOKENS == 0 else MAX_COMPLETION_TOKENS
+            model = row["Model"] if REQUEST_MODEL == "" else REQUEST_MODEL
             record_id = str(row["ID"])
             messages = []
             for message in conversation[:-1]:

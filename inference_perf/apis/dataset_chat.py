@@ -13,9 +13,9 @@ class DatasetChatCompletionAPIData(ChatCompletionAPIData):
     user_id: str
     conversation_id: str
     turn: int
-    max_completion_tokens: int
     model: str
     client_side_id: str
+    max_completion_tokens: int = 100
     
     def to_payload(self) -> dict[str, Any]:
         if self.max_completion_tokens == 0:

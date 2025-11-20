@@ -33,11 +33,14 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 _MICROSECONDS_PER_SECOND = 1_000_000
+DOWN_SAMPLE_GEO_DATASET = 0
+
 if  "DOWN_SAMPLE_GEO_DATASET" in os.environ:
     try:
         DOWN_SAMPLE_GEO_DATASET = int(os.environ["DOWN_SAMPLE_GEO_DATASET"])
+        logger.info(f"Using DOWN_SAMPLE_GEO_DATASET={DOWN_SAMPLE_GEO_DATASET}")
     except ValueError:
-        DOWN_SAMPLE_GEO_DATASET = 0
+        logger.debug("invalid DOWN_SAMPLE_GEO_DATASET value, defaulting to 0")
 
 def to_microseconds(timestamp_seconds: float) -> int:
     return int(timestamp_seconds * _MICROSECONDS_PER_SECOND)
@@ -276,7 +279,7 @@ class PostgresResultLogger:
         if DOWN_SAMPLE_GEO_DATASET > 0:
             n = n * DOWN_SAMPLE_GEO_DATASET
         self.pbar.update(n)
-        if self.pbar.n >= self.pbar.total:
+        if self.pbar.n >= self.pbar.total or self.pbar.n + DOWN_SAMPLE_GEO_DATASET >= self.pbar.total:
             self.pbar.close()
             self.stop_event.set()
         return True
