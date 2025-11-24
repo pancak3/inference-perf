@@ -176,7 +176,7 @@ class PostgresResultLogger:
         )
 
     def _load_batch_size(self) -> int:
-        raw_value = os.getenv("INFERENCE_DB_BATCH_SIZE", "100")
+        raw_value = os.getenv("INFERENCE_DB_BATCH_SIZE", "500")
         try:
             batch_size = int(raw_value)
         except ValueError as exc:
