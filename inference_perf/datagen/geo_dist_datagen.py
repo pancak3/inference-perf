@@ -14,6 +14,7 @@
 import logging
 import time
 import os
+import re
 import polars as pl
 from datetime import datetime, timedelta, timezone
 from typing import Generator, List, Optional
@@ -57,6 +58,8 @@ if "MAX_COMPLETION_TOKENS" in os.environ:
 
 
 class GeoDistributionDataGenerator(DataGenerator):
+    _MAX_MESSAGE_LENGTH = 8096
+
     def __init__(self, api_config: APIConfig, config: DataConfig, tokenizer: Optional[CustomTokenizer]) -> None:
         super().__init__(api_config, config, tokenizer)
         if not config.path:
@@ -147,8 +150,24 @@ class GeoDistributionDataGenerator(DataGenerator):
             model = row["Model"] if REQUEST_MODEL == "" else REQUEST_MODEL
             record_id = str(row["ID"])
             messages = []
-            for message in conversation[:-1]:
-                messages.append(ChatMessage(role=message["role"], content=message["content"]))
+            current_word_count = 0
+            temp_messages = []
+            for message in reversed(conversation[:-1]):
+                content = message["content"]
+                words = [w for w in re.split(r'[\s\W]+', content) if w]
+                word_count = len(words)
+                
+                if current_word_count + word_count <= self._MAX_MESSAGE_LENGTH:
+                    temp_messages.append(ChatMessage(role=message["role"], content=content))
+                    current_word_count += word_count
+                else:
+                    remaining = self._MAX_MESSAGE_LENGTH - current_word_count
+                    if remaining > 0:
+                        truncated_content = " ".join(words[-remaining:])
+                        temp_messages.append(ChatMessage(role=message["role"], content=truncated_content))
+                        current_word_count += remaining
+                    break
+            messages = list(reversed(temp_messages))
             yield DatasetChatCompletionAPIData(
                 messages=messages, max_completion_tokens=max_completion_tokens, request_send_time=request_send_time, 
                 user_id=user_id, conversation_id=conversation_id, turn=turn, model=model, client_side_id=record_id)
