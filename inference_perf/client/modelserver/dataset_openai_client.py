@@ -79,7 +79,10 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
                     )
             except Exception:
                 if retry < self._max_retries:
+                    to_sleep = min(0.5 * (2 ** retry), 120.0)
                     logger.warning(f"Retrying request id={request_id} due to error:", exc_info=True)
+                    logger.info(f"Sleeping for {to_sleep} seconds before retrying...")
+                    time.sleep(to_sleep)  # exponential backoff
                     return await self.process_request(data, scheduled_time, detailed_result_queue, retry=retry+1)
                 else:
                     logger.error("error occured during request processing:", exc_info=True)
