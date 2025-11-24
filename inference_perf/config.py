@@ -30,7 +30,7 @@ class APIConfig(BaseModel):
     streaming: bool = False
     headers: Optional[dict[str, str]] = None
     request_timeout_seconds: float = 600.0
-    connect_timeout_seconds: float = 30.0
+    connect_timeout_seconds: float = 600.0
 
 
 class DataGenType(Enum):
