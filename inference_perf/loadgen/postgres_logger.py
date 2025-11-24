@@ -116,7 +116,7 @@ class PostgresResultLogger:
             self._config.table,
         )
         atexit.register(self.stop)
-        self.pbar = tqdm(total=self._number_of_requests, desc="Logged requests", position=0, leave=True)
+        self.pbar = tqdm(total=self._number_of_requests, desc="Logged requests", position=0, leave=True, disable=False)
         self.stop_event = threading.Event()
         self._worker_thread = threading.Thread(target=self._run, name="PostgresResultLogger", daemon=True)
         self._running = True

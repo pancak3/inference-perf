@@ -31,6 +31,7 @@ COPY inference_perf ./inference_perf
 # Set PYTHONPATH and PATH to use virtual environment
 ENV PYTHONPATH=/workspace/inference_perf
 ENV PATH="/workspace/.venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
 
 COPY run.sh .
 CMD ["./run.sh"]
