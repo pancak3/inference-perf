@@ -52,7 +52,7 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
         max_completion_tokens = payload['max_completion_tokens']
         request_data = json.dumps(payload)
         request_id = payload.get("client_side_id", None)
-        # logger.info(f"Sending request id={request_id} at scheduled_time={scheduled_time}")
+        logger.info(f"Sending request id={request_id} at scheduled_time={scheduled_time}")
         publisher = self._ensure_publisher(detailed_result_queue)
         timeout = aiohttp.ClientTimeout(
             total=self.api_config.request_timeout_seconds,
@@ -98,7 +98,7 @@ class DatasetOpenAIModelServerClient(vLLMModelServerClient):
             finally:
                 if payload_for_logger is not None:
                     publisher.publish(payload_for_logger)
-        # logger.info(f"Completed request id={request_id}")
+        logger.info(f"Completed request id={request_id}")
 
     def _ensure_publisher(self, detailed_result_queue: mp.Queue) -> "_DetailedResultPublisher":
         if (

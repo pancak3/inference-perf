@@ -33,7 +33,7 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 _MICROSECONDS_PER_SECOND = 1_000_000
-DOWN_SAMPLE_GEO_DATASET = 0
+DOWN_SAMPLE_GEO_DATASET = 1
 
 if  "DOWN_SAMPLE_GEO_DATASET" in os.environ:
     try:

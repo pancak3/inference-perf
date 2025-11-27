@@ -61,15 +61,15 @@ class DatasetLoadGenerator(LoadGenerator):
         for item in data_generator:
             request_queue.put((0, item))
             n += 1
-        logger.debug(f"Loaded {n} requests into the queue")
+        logger.info(f"Loaded {n} requests into the queue")
 
         # Join on request queue to ensure that all workers have completed
         # their requests for the stage
         while request_queue.qsize() > 0:
-            logger.debug(f"Loadgen awaiting empty request queue, current size: {request_queue.qsize()}")
+            logger.info(f"Loadgen awaiting empty request queue, current size: {request_queue.qsize()}")
             await sleep(1)
 
-        logger.debug("Loadgen sending STAGE_END to workers")
+        logger.info("Loadgen sending STAGE_END to workers")
         for worker in self.workers:
             worker.status_queue.put(Status.STAGE_END)
 
@@ -143,7 +143,28 @@ class Worker(mp.Process):
         while True:
             try:
                 await semaphore.acquire()
-                item = self.request_queue.get_nowait()
+                try:
+                    item = self.request_queue.get_nowait()
+                    logger.info(f"Worker {self.id} got item")
+                except Empty:
+                    semaphore.release()
+                    status = self.check_status()
+                    if status is None:
+                        await sleep(0)
+                        continue
+                    if status is not None:
+                        logger.debug(f"[Worker {self.id}] received {status}, awaiting {len(tasks)} tasks")
+                        await gather(*tasks)
+                        tasks = []
+                        self.status_queue.task_done()
+                    if status == Status.STAGE_END:
+                        await sleep(0.1)
+                        continue
+                    if status == Status.WORKER_STOP:
+                        break
+                    continue
+
+                # logger.info(f"Worker {self.id} picked up item")
                 #### temp patch to downsample ####
                 if  down_sample_geo_dataset:
                     count += 1
@@ -161,6 +182,7 @@ class Worker(mp.Process):
                     request_time: float,
                     detailed_result_queue: mp.JoinableQueue
                 ) -> None:
+                    logger.info(f"Worker {self.id} scheduling client task")
                     current_time = time.perf_counter()
                     sleep_time = request_time - current_time if (not self.datagen.no_wait) else 0
                     if sleep_time > 0:
@@ -179,20 +201,10 @@ class Worker(mp.Process):
                 task = create_task(schedule_client(self.request_queue, request, request_time, self.detailed_result_queue))
                 tasks.append(task)
                 await sleep(0)
-            except Empty:
+            except Exception as e:
+                logger.error(f"Worker {self.id} encountered error: {e}", exc_info=True)
                 semaphore.release()
-                status = self.check_status()
-                if status is None:
-                    await sleep(0)
-                if status is not None:
-                    logger.debug(f"[Worker {self.id}] received {status}, awaiting {len(tasks)} tasks")
-                    await gather(*tasks)
-                    tasks = []
-                    self.status_queue.task_done()
-                if status == Status.STAGE_END:
-                    continue
-                if status == Status.WORKER_STOP:
-                    break
+                await sleep(1)
 
     def run(self) -> None:
         set_event_loop_policy(uvloop.EventLoopPolicy())
