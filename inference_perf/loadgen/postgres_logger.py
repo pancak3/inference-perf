@@ -116,7 +116,8 @@ class PostgresResultLogger:
             self._config.table,
         )
         atexit.register(self.stop)
-        self.pbar = tqdm(total=self._number_of_requests, desc="Logged requests", position=0, leave=True, disable=False)
+        self.pbar_processed = tqdm(total=self._number_of_requests, desc="Processed requests", position=0, leave=True, disable=False)
+        self.pbar = tqdm(total=self._number_of_requests, desc="Logged requests", position=1, leave=True, disable=False)
         self.stop_event = threading.Event()
         self._worker_thread = threading.Thread(target=self._run, name="PostgresResultLogger", daemon=True)
         self._running = True
@@ -229,6 +230,7 @@ class PostgresResultLogger:
                         success = self._flush_batch(buffered_items, is_final=True)
                         if success:
                             buffered_items.clear()
+                    self.pbar_processed.close()
                     break
                 if item is self._QUEUE_TIMEOUT:
                     if buffered_items:
@@ -238,6 +240,7 @@ class PostgresResultLogger:
                         if not self.stop_event.is_set():
                             self._sleep_with_jitter()
                     continue
+                self.pbar_processed.update(1)
 
                 buffered_items.append(cast(Sequence[Any], item))
                 if len(buffered_items) >= self._batch_size:

@@ -145,7 +145,7 @@ class Worker(mp.Process):
                 await semaphore.acquire()
                 try:
                     item = self.request_queue.get_nowait()
-                    logger.info(f"Worker {self.id} got item")
+                    # logger.info(f"Worker {self.id} got item")
                 except Empty:
                     semaphore.release()
                     status = self.check_status()
@@ -182,7 +182,7 @@ class Worker(mp.Process):
                     request_time: float,
                     detailed_result_queue: mp.JoinableQueue
                 ) -> None:
-                    logger.info(f"Worker {self.id} scheduling client task")
+                    # logger.info(f"Worker {self.id} scheduling client task")
                     current_time = time.perf_counter()
                     sleep_time = request_time - current_time if (not self.datagen.no_wait) else 0
                     if sleep_time > 0:
